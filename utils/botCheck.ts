@@ -200,6 +200,30 @@ export function isLikelyBrowserAutomation(req: NextRequest): { flag: boolean; re
   return { flag: reasons.length > 0, reasons }
 }
 
+export function isTrustedGoogleRef(req: NextRequest): boolean {
+  const ref = req.headers.get('referer') || ''
+  if (!ref) return false
+  try {
+    const u = new URL(ref)
+    const host = u.hostname.toLowerCase()
+    // Only google.* domains (exclude googleusercontent)
+    const isGoogle = /(^|\.)google\.[a-z.]+$/.test(host) && !/googleusercontent\.com$/.test(host)
+    if (!isGoogle) return false
+    // Navigation hints
+    const sfu = req.headers.get('sec-fetch-user') || ''
+    const sfd = req.headers.get('sec-fetch-dest') || ''
+    const sfm = req.headers.get('sec-fetch-mode') || ''
+    const accept = req.headers.get('accept') || ''
+    const query = u.search || ''
+    const hasAdOrSearchParams = /[?&](gclid|utm_source=google|utm_medium=cpc|utm_campaign)=/i.test(query)
+    const navigational = sfu.includes('?1') || (sfd === 'document' && /navigate/i.test(sfm))
+    const htmlAccept = /text\/html/i.test(accept)
+    return (navigational || hasAdOrSearchParams) && htmlAccept
+  } catch {
+    return false
+  }
+}
+
 export async function reversePTRMatches(ip: string | null, patterns: RegExp[], timeoutMs = 500): Promise<boolean> {
   if (!ip) return false
   // Avoid private ranges
