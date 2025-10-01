@@ -11,6 +11,7 @@ import {
   reversePTRMatches,
   fingerprintValid,
   getASN,
+  isAnalyzerRequest,
 } from './utils/botCheck'
 
 async function logDecision(req: NextRequest, decision: 'offer' | 'safe' | 'challenge' | 'bypass', reasons: string[], score?: number) {
@@ -72,6 +73,12 @@ export async function middleware(req: NextRequest) {
     return NextResponse.rewrite(new URL('/safe.html', req.url))
   }
 
+  // Block common performance analyzers (PageSpeed/Lighthouse/etc.)
+  if (isAnalyzerRequest(req)) {
+    await logDecision(req, 'safe', ['analyzer:detected'])
+    return NextResponse.rewrite(new URL('/safe.html', req.url))
+  }
+
   const ip = getIP(req)
   if (isBlacklistedIP(ip)) {
     await logDecision(req, 'safe', ['ip:blacklist'])
@@ -110,6 +117,10 @@ export async function middleware(req: NextRequest) {
 
   // Passed: send to offer immediately
   await logDecision(req, 'offer', ['ml:pass', `score:${score}`, ...factors], score)
+  const OFFER_URL = process.env.NEXT_PUBLIC_OFFER_URL
+  if (OFFER_URL && /^https?:\/\//i.test(OFFER_URL)) {
+    return NextResponse.redirect(OFFER_URL)
+  }
   return NextResponse.rewrite(new URL('/offer.html', req.url))
 }
 

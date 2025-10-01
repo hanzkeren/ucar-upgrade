@@ -16,6 +16,9 @@ Local
 Deploy to Vercel
 - Push to a repo and import in Vercel.
 - No extra config required. Middleware runs at Edge.
+ - Optional: set `NEXT_PUBLIC_OFFER_URL` in Vercel Project → Settings → Environment Variables.
+   - If set, humans are redirected server-side (302) to this URL.
+   - If not set, humans receive `/offer.html` from `public/`.
 
 Deploy to Cloudflare Pages (pages.dev)
 1) Install tools locally when targeting Pages:
@@ -46,4 +49,4 @@ Tuning
 - Expand ASN/CIDR lists in `utils/botCheck.ts`.
 - Adjust score threshold in `middleware.ts` (default 50).
 - Edit bot UA regexes to your risk profile.
-
+ - We also block common analyzers (Lighthouse/PageSpeed/GTmetrix/Pingdom/WebPageTest) to avoid skewed UX metrics.

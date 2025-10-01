@@ -17,6 +17,15 @@ const BOT_UA_PATTERNS = [
   /twitterbot/i,
   /linkedinbot/i,
   /applebot/i,
+  // Performance testers / analyzers
+  /lighthouse/i,
+  /chrome-lighthouse/i,
+  /page ?speed/i,
+  /google-?pagespeed/i,
+  /gtmetrix/i,
+  /pingdom/i,
+  /webpagetest/i,
+  /headlesschrome/i,
 ]
 
 const ASN_BLACKLIST = new Set<number>([
@@ -117,6 +126,16 @@ export function isBlacklistedIP(ip: string | null): boolean {
     const { base, mask } = parsed
     if ((ipn & mask) === base) return true
   }
+  return false
+}
+
+export function isAnalyzerRequest(req: NextRequest): boolean {
+  const ua = req.headers.get('user-agent') || ''
+  if (isBlockedUserAgent(ua).blocked) return true
+  const ref = req.headers.get('referer') || ''
+  if (/pagespeed\.web\.dev|developers\.google\.com\/speed|gtmetrix\.com|tools\.pingdom\.com|webpagetest\.org/i.test(ref)) return true
+  const xlh = req.headers.get('x-lighthouse')
+  if (xlh === '1') return true
   return false
 }
 
