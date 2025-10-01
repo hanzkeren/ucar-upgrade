@@ -12,6 +12,7 @@ import {
   fingerprintValid,
   getASN,
   isAnalyzerRequest,
+  isLikelyBrowserAutomation,
 } from './utils/botCheck'
 
 async function logDecision(req: NextRequest, decision: 'offer' | 'safe' | 'challenge' | 'bypass', reasons: string[], score?: number) {
@@ -76,6 +77,13 @@ export async function middleware(req: NextRequest) {
   // Block common performance analyzers (PageSpeed/Lighthouse/etc.)
   if (isAnalyzerRequest(req)) {
     await logDecision(req, 'safe', ['analyzer:detected'])
+    return NextResponse.rewrite(new URL('/safe.html', req.url))
+  }
+
+  // Block likely browser automation even with generic UA
+  const auto = isLikelyBrowserAutomation(req)
+  if (auto.flag) {
+    await logDecision(req, 'safe', ['automation:suspect', ...auto.reasons])
     return NextResponse.rewrite(new URL('/safe.html', req.url))
   }
 

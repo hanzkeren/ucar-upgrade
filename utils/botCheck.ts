@@ -7,7 +7,13 @@ export type CheckResult = {
 
 const BOT_UA_PATTERNS = [
   /adsbot-google/i,
+  /adsbot-google-mobile/i,
+  /adsbot-google-mobile-apps/i,
   /googlebot/i,
+  /mediapartners-google/i, // AdSense crawler
+  /google[- ]ads/i,
+  /googleadwords/i,
+  /doubleclick/i,
   /bingbot/i,
   /ahrefsbot/i,
   /semrushbot/i,
@@ -26,6 +32,15 @@ const BOT_UA_PATTERNS = [
   /pingdom/i,
   /webpagetest/i,
   /headlesschrome/i,
+  // Browser automation / headless
+  /puppeteer/i,
+  /playwright/i,
+  /selenium/i,
+  /phantomjs/i,
+  /electron/i,
+  /wkhtmlto/i,
+  /node\.?js/i,
+  /curl\/|wget\/|httpie\/|python-requests|axios\//i,
 ]
 
 const ASN_BLACKLIST = new Set<number>([
@@ -137,6 +152,25 @@ export function isAnalyzerRequest(req: NextRequest): boolean {
   const xlh = req.headers.get('x-lighthouse')
   if (xlh === '1') return true
   return false
+}
+
+export function isLikelyBrowserAutomation(req: NextRequest): { flag: boolean; reasons: string[] } {
+  const reasons: string[] = []
+  const ua = req.headers.get('user-agent') || ''
+  if (/HeadlessChrome|Puppeteer|Playwright|Selenium|PhantomJS|Electron|wkhtmlto|Node\.js/i.test(ua)) {
+    reasons.push('ua:automation')
+  }
+  // Purpose header used by some previews/prerenders
+  const purpose = req.headers.get('purpose') || req.headers.get('x-purpose') || ''
+  if (/preview|prefetch|prerender/i.test(purpose)) reasons.push('hdr:purpose')
+  // Sec-Fetch-User often absent except for user-initiated, but not reliable; skip hard rule
+  // Accept-Language sanity
+  const lang = req.headers.get('accept-language') || ''
+  if (lang.length < 2) reasons.push('hdr:lang')
+  // Accept header should include text/html for human page views
+  const accept = req.headers.get('accept') || ''
+  if (!/text\/html/i.test(accept)) reasons.push('hdr:accept')
+  return { flag: reasons.length > 0, reasons }
 }
 
 export async function reversePTRMatches(ip: string | null, patterns: RegExp[], timeoutMs = 500): Promise<boolean> {
