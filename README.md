@@ -13,10 +13,18 @@ Local
 - Visit `/` → first-time users go to `/hc` then `/offer.html`; bots go to `/safe.html`.
 - Logs: GET `/api/logs` (JSON).
 
+Activation (Safe Mode vs Active Filter)
+- Default (env not set): If `NEXT_PUBLIC_OFFER_URL` is NOT set, site runs in Safe Mode:
+  - All non-asset routes are rewritten to `/safe.html`.
+  - Useful saat iklan belum aktif atau menunggu approval.
+- Active (env set): Set `NEXT_PUBLIC_OFFER_URL=https://tujuan-offer-anda` to enable the full cloaking filter.
+  - Humans get 302 redirect to this URL (server-side) or `/offer.html` fallback.
+  - Bots/analysers/DC IPs get `/safe.html`.
+
 Deploy to Vercel
 - Push to a repo and import in Vercel.
 - No extra config required. Middleware runs at Edge.
- - Optional: set `NEXT_PUBLIC_OFFER_URL` in Vercel Project → Settings → Environment Variables.
+- Set `NEXT_PUBLIC_OFFER_URL` in Vercel Project → Settings → Environment Variables untuk mengaktifkan filter.
    - If set, humans are redirected server-side (302) to this URL.
    - If not set, humans receive `/offer.html` from `public/`.
 

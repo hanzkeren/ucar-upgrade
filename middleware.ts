@@ -46,6 +46,23 @@ async function logDecision(req: NextRequest, decision: 'offer' | 'safe' | 'chall
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl
 
+  // Activation gate: if NEXT_PUBLIC_OFFER_URL is not set, always serve safe.html
+  const OFFER_URL_ENV = process.env.NEXT_PUBLIC_OFFER_URL
+  if (!OFFER_URL_ENV) {
+    // Allow assets, _next, api, and safe.html itself
+    if (
+      pathname.startsWith('/_next') ||
+      pathname.startsWith('/api/') ||
+      pathname === '/safe.html' ||
+      isStaticAssetPath(pathname)
+    ) {
+      await logDecision(req, 'bypass', ['inactive:env-missing'])
+      return NextResponse.next()
+    }
+    await logDecision(req, 'safe', ['inactive:env-missing'])
+    return NextResponse.rewrite(new URL('/safe.html', req.url))
+  }
+
   // Allow these paths to pass through without cloaking
   if (
     pathname.startsWith('/_next') ||
