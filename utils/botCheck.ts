@@ -44,26 +44,53 @@ const BOT_UA_PATTERNS = [
 ]
 
 const ASN_BLACKLIST = new Set<number>([
-  // Cloud/DC providers (common)
-  16509, // AWS
-  15169, // Google
-  8075,  // Microsoft
-  14618, // Amazon-1
-  396982,// Amazon-2
-  32934, // Facebook
-  13335, // Cloudflare
-  16276, // OVH
-  24940, // Hetzner
-  14061, // DigitalOcean
-  54113, // Fastly
+  // Cloud/DC providers (expanded; tune as needed)
+  16509,   // Amazon (AWS)
+  14618,   // Amazon-1
+  396982,  // Amazon-2
+  15169,   // Google
+  8075,    // Microsoft
+  31898,   // Oracle Cloud
+  45102,   // Alibaba
+  132203,  // Tencent Cloud
+  16276,   // OVH
+  24940,   // Hetzner
+  14061,   // DigitalOcean
+  20473,   // Choopa/Vultr
+  16265,   // Leaseweb
+  12876,   // Scaleway/Online.net
+  63949,   // Akamai/Linode
+  20940,   // Akamai Technologies
+  16625,   // Akamai International
+  13335,   // Cloudflare
+  54113,   // Fastly
+  32934,   // Meta/Facebook
 ])
 
 // Minimal CIDR matcher for a few sensitive ranges (illustrative, not exhaustive)
 const CIDR_BLACKLIST = [
-  '34.64.0.0/10',  // Google Cloud (example)
-  '35.192.0.0/10', // Google Cloud (example)
-  '52.0.0.0/8',    // AWS (broad)
-  '13.64.0.0/11',  // Azure (example)
+  // Broad cloud ranges (aggressive; may cause FPs — tune carefully)
+  '34.0.0.0/8',    // Google
+  '35.0.0.0/8',    // Google
+  '52.0.0.0/8',    // AWS
+  '54.0.0.0/8',    // AWS
+  '13.64.0.0/11',  // Azure
+  '20.0.0.0/8',    // Microsoft Azure broad
+  '104.16.0.0/13', // Cloudflare (proxy)
+  '172.64.0.0/13', // Cloudflare (proxy)
+  '141.101.64.0/18',
+  '108.162.192.0/18',
+  '190.93.240.0/20',
+  '188.114.96.0/20',
+  '197.234.240.0/22',
+  '198.41.128.0/17',
+  '162.158.0.0/15',
+  '173.245.48.0/20',
+  '103.21.244.0/22',
+  '103.22.200.0/22',
+  '103.31.4.0/22',
+  '151.101.0.0/16', // Fastly
+  '199.232.0.0/16', // Fastly
 ]
 
 export function isBlockedUserAgent(ua: string | null | undefined): { blocked: boolean; match?: string } {
