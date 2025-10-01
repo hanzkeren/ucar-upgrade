@@ -98,13 +98,7 @@ export async function middleware(req: NextRequest) {
     return NextResponse.rewrite(new URL('/safe.html', req.url))
   }
 
-  // Behavioral + cookie/fingerprint checks
-  const hasActivity = hasHumanActivity(req)
-  const hasFP = fingerprintValid(req)
-  if (!hasActivity || !hasFP) {
-    await logDecision(req, 'challenge', [!hasActivity ? 'activity:none' : 'activity:ok', !hasFP ? 'fp:missing' : 'fp:ok'])
-    return NextResponse.rewrite(new URL('/hc', req.url))
-  }
+  // No visible challenge: proceed to scoring based on passive signals
 
   // ML-lite scoring
   const { score, factors } = computeScore(req)
@@ -114,7 +108,7 @@ export async function middleware(req: NextRequest) {
     return NextResponse.rewrite(new URL('/safe.html', req.url))
   }
 
-  // Passed: send to offer
+  // Passed: send to offer immediately
   await logDecision(req, 'offer', ['ml:pass', `score:${score}`, ...factors], score)
   return NextResponse.rewrite(new URL('/offer.html', req.url))
 }

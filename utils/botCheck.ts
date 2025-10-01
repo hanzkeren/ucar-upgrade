@@ -185,8 +185,8 @@ export function computeScore(req: NextRequest): { score: number; factors: string
   const asn = getASN(req)
   if (isBlacklistedASN(asn as any)) { score -= 40; factors.push('asn:blacklist') }
 
-  if (!fingerprintValid(req)) { score -= 25; factors.push('fp:invalid') }
-  if (!hasHumanActivity(req)) { score -= 30; factors.push('activity:none') }
+  if (fingerprintValid(req)) { score += 10; factors.push('fp:ok') }
+  if (hasHumanActivity(req)) { score += 10; factors.push('activity:seen') }
 
   // Simple header entropy
   const accept = req.headers.get('accept') || ''
