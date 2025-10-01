@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse, userAgent } from 'next/server'
+import { getOfferUrlRuntime } from './utils/config'
 import {
   computeScore,
   getIP,
@@ -46,9 +47,9 @@ async function logDecision(req: NextRequest, decision: 'offer' | 'safe' | 'chall
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl
 
-  // Activation gate: if NEXT_PUBLIC_OFFER_URL is not set, always serve safe.html
-  const OFFER_URL_ENV = process.env.NEXT_PUBLIC_OFFER_URL
-  if (!OFFER_URL_ENV) {
+  // Activation gate: resolve offer URL (Edge Config or env). If absent, Safe Mode.
+  const OFFER_URL = await getOfferUrlRuntime()
+  if (!OFFER_URL) {
     // Allow assets, _next, api, and safe.html itself
     if (
       pathname.startsWith('/_next') ||
@@ -79,10 +80,7 @@ export async function middleware(req: NextRequest) {
   // Allowlist: real browser traffic coming from Google search results
   if (isTrustedGoogleRef(req)) {
     await logDecision(req, 'offer', ['allow:google-ref'])
-    const OFFER_URL = process.env.NEXT_PUBLIC_OFFER_URL
-    if (OFFER_URL && /^https?:\/\//i.test(OFFER_URL)) {
-      return NextResponse.redirect(OFFER_URL)
-    }
+    if (OFFER_URL) return NextResponse.redirect(OFFER_URL)
     return NextResponse.rewrite(new URL('/offer.html', req.url))
   }
 
@@ -153,10 +151,7 @@ export async function middleware(req: NextRequest) {
 
   // Passed: send to offer immediately
   await logDecision(req, 'offer', ['ml:pass', `score:${score}`, ...factors], score)
-  const OFFER_URL = process.env.NEXT_PUBLIC_OFFER_URL
-  if (OFFER_URL && /^https?:\/\//i.test(OFFER_URL)) {
-    return NextResponse.redirect(OFFER_URL)
-  }
+  if (OFFER_URL) return NextResponse.redirect(OFFER_URL)
   return NextResponse.rewrite(new URL('/offer.html', req.url))
 }
 
