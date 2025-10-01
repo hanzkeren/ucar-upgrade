@@ -1,0 +1,10 @@
+name = "ucar-pages"
+compatibility_date = "2025-10-01"
+compatibility_flags = [
+  "nodejs_compat",                    # Enable Node.js APIs in Workers runtime
+  "nodejs_compat_populate_process_env" # Populate process.env from Pages env vars
+]
+
+# Pages projects ignore most Worker-specific config, but the compatibility
+# flags are honored for Pages Functions (beta). Dashboard toggles can also be used.
+
