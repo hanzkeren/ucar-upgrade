@@ -1,0 +1,124 @@
+import { NextRequest, NextResponse, userAgent } from 'next/server'
+import {
+  computeScore,
+  getIP,
+  hasHumanActivity,
+  isBanned,
+  isBlacklistedASN,
+  isBlacklistedIP,
+  isBlockedUserAgent,
+  isStaticAssetPath,
+  reversePTRMatches,
+  fingerprintValid,
+  getASN,
+} from './utils/botCheck'
+
+async function logDecision(req: NextRequest, decision: 'offer' | 'safe' | 'challenge' | 'bypass', reasons: string[], score?: number) {
+  try {
+    const origin = req.nextUrl.origin
+    const payload = {
+      ts: Date.now(),
+      path: req.nextUrl.pathname,
+      ip: getIP(req),
+      ua: req.headers.get('user-agent') || '',
+      asn: getASN(req),
+      country: (req as any)?.cf?.country || req.geo?.country || req.headers.get('cf-ipcountry') || null,
+      decision,
+      reasons,
+      score: score ?? null,
+    }
+    // Fire-and-forget; don't block middleware
+    fetch(`${origin}/api/logs`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(payload),
+      // keepalive hints the platform to allow it after response
+      keepalive: true as any,
+    }).catch(() => {})
+  } catch {
+    // ignore logging errors
+  }
+}
+
+export async function middleware(req: NextRequest) {
+  const { pathname } = req.nextUrl
+
+  // Allow these paths to pass through without cloaking
+  if (
+    pathname.startsWith('/_next') ||
+    pathname.startsWith('/api/') ||
+    pathname === '/hc' ||
+    pathname === '/safe.html' ||
+    pathname === '/offer.html' ||
+    isStaticAssetPath(pathname)
+  ) {
+    await logDecision(req, 'bypass', ['matcher:excluded'])
+    return NextResponse.next()
+  }
+
+  // Hard bans
+  if (isBanned(req)) {
+    await logDecision(req, 'safe', ['cookie:ban'])
+    return NextResponse.rewrite(new URL('/safe.html', req.url))
+  }
+
+  const uaStr = req.headers.get('user-agent')
+  const { isBot: uaBot } = (() => {
+    const r = isBlockedUserAgent(uaStr)
+    return { isBot: r.blocked }
+  })()
+  if (uaBot) {
+    await logDecision(req, 'safe', ['ua:blocklist'])
+    return NextResponse.rewrite(new URL('/safe.html', req.url))
+  }
+
+  const ip = getIP(req)
+  if (isBlacklistedIP(ip)) {
+    await logDecision(req, 'safe', ['ip:blacklist'])
+    return NextResponse.rewrite(new URL('/safe.html', req.url))
+  }
+
+  const asn = getASN(req)
+  if (isBlacklistedASN(asn as any)) {
+    await logDecision(req, 'safe', ['asn:blacklist'])
+    return NextResponse.rewrite(new URL('/safe.html', req.url))
+  }
+
+  // Reverse DNS PTR for known crawler domains
+  const isPtrBot = await reversePTRMatches(ip, [
+    /\.googlebot\.com\.?$/i,
+    /\.search\.msn\.com\.?$/i,
+    /\.crawl\.yahoo\.net\.?$/i,
+    /\.baidu\.com\.?$/i,
+    /\.yandex\.ru\.?$/i,
+    /\.facebook\.com\.?$/i,
+  ])
+  if (isPtrBot) {
+    await logDecision(req, 'safe', ['ptr:bot'])
+    return NextResponse.rewrite(new URL('/safe.html', req.url))
+  }
+
+  // Behavioral + cookie/fingerprint checks
+  const hasActivity = hasHumanActivity(req)
+  const hasFP = fingerprintValid(req)
+  if (!hasActivity || !hasFP) {
+    await logDecision(req, 'challenge', [!hasActivity ? 'activity:none' : 'activity:ok', !hasFP ? 'fp:missing' : 'fp:ok'])
+    return NextResponse.rewrite(new URL('/hc', req.url))
+  }
+
+  // ML-lite scoring
+  const { score, factors } = computeScore(req)
+  const threshold = 50
+  if (score < threshold) {
+    await logDecision(req, 'safe', ['ml:low', `score:${score}`, ...factors], score)
+    return NextResponse.rewrite(new URL('/safe.html', req.url))
+  }
+
+  // Passed: send to offer
+  await logDecision(req, 'offer', ['ml:pass', `score:${score}`, ...factors], score)
+  return NextResponse.rewrite(new URL('/offer.html', req.url))
+}
+
+export const config = {
+  matcher: ['/((?!_next|api|.*\\.(?:png|jpg|jpeg|gif|svg|ico|css|js|map|txt|webp|woff2?|ttf|eot)).*)'],
+}
