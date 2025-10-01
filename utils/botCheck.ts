@@ -197,7 +197,9 @@ export function isLikelyBrowserAutomation(req: NextRequest): { flag: boolean; re
   // Accept header should include text/html for human page views
   const accept = req.headers.get('accept') || ''
   if (!/text\/html/i.test(accept)) reasons.push('hdr:accept')
-  return { flag: reasons.length > 0, reasons }
+  // Only treat as automation on hard signals; missing lang alone is weak.
+  const hardSignals = /ua:automation/.test(reasons.join(',')) || /hdr:purpose/.test(reasons.join(',')) || /hdr:accept/.test(reasons.join(','))
+  return { flag: hardSignals, reasons }
 }
 
 export function isTrustedGoogleRef(req: NextRequest): boolean {
