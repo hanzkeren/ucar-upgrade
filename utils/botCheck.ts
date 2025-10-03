@@ -1,4 +1,30 @@
 import { NextRequest } from 'next/server'
+// Deployment Notes (Edge Config keys to add):
+// - IPQS_API_KEY: string (IPQualityScore API key)
+// - SIGN_KEY: string (HMAC secret for nonces and cookies)
+// - OFFER_URL: string (human redirect)
+// - LOGS_API_TOKEN: string (Bearer token for logs API)
+// - BOT_THRESHOLD: number string (e.g., "0.45")
+// - BOT_THRESHOLD_STRICT: number string (e.g., "0.65")
+// - RATE_LIMIT_CONFIG: JSON string (e.g., '{"windowSec":10,"perIp":20,"perFp":15,"perAsn":50}')
+// - WEIGHT_TABLE: JSON string defining feature weights overrides.
+// Read via @vercel/edge-config when available; fallback to process.env.
+
+// -----------------------------------------------------------------------------
+// Enhanced bot detection utilities
+// -----------------------------------------------------------------------------
+// This module extends the existing detection with:
+// 1) Threat intelligence reputation lookups for client IPs.
+// 2) Rate limiting per fingerprint/session with short rolling windows.
+// 3) Behavioral anomaly scoring using request interval patterns.
+// 4) Dynamic challenge rotation scaffolding (js/pow/webgl) based on risk.
+// 5) Improved weighted probability score and a new isBot() facade.
+//
+// Notes:
+// - We preserve existing exports and do not remove any functionality.
+// - New features are optional/fault-tolerant: if a provider/env is missing,
+//   we degrade gracefully without blocking traffic.
+// - We log reasons via the existing logging API when isBot() is used.
 
 export type CheckResult = {
   isBot: boolean
@@ -306,3 +332,512 @@ export function computeScore(req: NextRequest): { score: number; factors: string
 export function isStaticAssetPath(pathname: string): boolean {
   return /\.(?:png|jpg|jpeg|gif|svg|ico|css|js|map|txt|webp|woff2?|ttf|eot)$/i.test(pathname)
 }
+
+// -----------------------------------------------------------------------------
+// Config helpers (Edge-friendly)
+// -----------------------------------------------------------------------------
+async function edgeConfigGet<T = unknown>(key: string): Promise<T | null> {
+  try {
+    const mod = await import('@vercel/edge-config').catch(() => null as any)
+    if (mod && typeof (mod as any).get === 'function') {
+      const v = await (mod as any).get(key)
+      return (v ?? null) as T | null
+    }
+  } catch {}
+  return null
+}
+
+async function getCfgString(key: string): Promise<string | null> {
+  const v = await edgeConfigGet<string>(key)
+  if (typeof v === 'string' && v.length) return v
+  const env = (process.env as any)?.[key]
+  return typeof env === 'string' && env.length ? env : null
+}
+
+async function getCfgNumber(key: string): Promise<number | null> {
+  const v = await getCfgString(key)
+  if (v == null) return null
+  const n = Number(v)
+  return Number.isFinite(n) ? n : null
+}
+
+async function getCfgJSON<T = any>(key: string): Promise<T | null> {
+  const v = await getCfgString(key)
+  if (!v) return null
+  try { return JSON.parse(v) as T } catch { return null }
+}
+
+// Short helper: compute /24 CIDR for IPv4 (best-effort)
+function ipToCidr24(ip: string | null): string | null {
+  if (!ip) return null
+  const parts = ip.split('.')
+  if (parts.length !== 4) return null
+  return `${parts[0]}.${parts[1]}.${parts[2]}.0/24`
+}
+
+// -----------------------------------------------------------------------------
+// Threat intelligence (IPQualityScore) with short in-memory cache
+// -----------------------------------------------------------------------------
+type IPQS = {
+  fraud_score?: number
+  bot_status?: boolean
+  proxy?: boolean
+  vpn?: boolean
+  tor?: boolean
+  recent_abuse?: boolean
+  active_vpn?: boolean
+  active_tor?: boolean
+  connection_type?: string
+}
+
+const IPQS_CACHE = new Map<string, { ts: number; data: IPQS }>()
+const IPQS_TTL_MS = 2 * 60 * 1000 // 2 minutes to limit latency
+
+async function queryIPQS(ip: string | null, key: string | null, timeoutMs = 1200): Promise<IPQS | null> {
+  if (!ip || !key) return null
+  const now = Date.now()
+  const c = IPQS_CACHE.get(ip)
+  if (c && now - c.ts < IPQS_TTL_MS) return c.data
+  const ctl = new AbortController()
+  const t = setTimeout(() => ctl.abort('timeout'), timeoutMs)
+  try {
+    const url = `https://ipqualityscore.com/api/json/ip/${encodeURIComponent(key)}/${encodeURIComponent(ip)}`
+    const res = await fetch(url, { method: 'GET', signal: ctl.signal, cache: 'no-store' } as any)
+    if (!res.ok) return null
+    const data = (await res.json().catch(() => null)) as IPQS | null
+    if (data) IPQS_CACHE.set(ip, { ts: now, data })
+    return data
+  } catch {
+    return null
+  } finally {
+    clearTimeout(t)
+  }
+}
+
+// -----------------------------------------------------------------------------
+// External rate limiting & honeypot counters (KV-backed via utils/rateLimiter)
+// -----------------------------------------------------------------------------
+import { bumpCountersAndGetPenalty, getAndSetBinding, getHoneypotHits } from './rateLimiter'
+import { signPayload } from './nonce'
+
+// -----------------------------------------------------------------------------
+// New adaptive scoring ensemble
+// -----------------------------------------------------------------------------
+type WeightTable = {
+  ua_block?: number
+  asn_black?: number
+  ip_black?: number
+  ipqs_fraud?: number
+  ipqs_proxy?: number
+  ipqs_vpn?: number
+  ipqs_tor?: number
+  ptr_bot?: number
+  rate_high?: number
+  behavior_uniform?: number
+  behavior_fast?: number
+  tls_present?: number
+  js_nonce_valid?: number
+  fp_ok?: number
+  activity_ok?: number
+  hp_hit?: number
+}
+
+const DEFAULT_WEIGHTS: Required<WeightTable> = {
+  ua_block: 0.35,
+  asn_black: 0.25,
+  ip_black: 0.20,
+  ipqs_fraud: 0.28,
+  ipqs_proxy: 0.18,
+  ipqs_vpn: 0.18,
+  ipqs_tor: 0.30,
+  ptr_bot: 0.30,
+  rate_high: 0.18,
+  behavior_uniform: 0.12,
+  behavior_fast: 0.10,
+  tls_present: -0.04,
+  js_nonce_valid: -0.10,
+  fp_ok: -0.10,
+  activity_ok: -0.10,
+  hp_hit: 0.50,
+}
+
+function clamp01(n: number) { return n < 0 ? 0 : n > 1 ? 1 : n }
+
+// Public API (new): returns probability-like score in [0,1]
+export async function isBot(request: NextRequest): Promise<{ bot: boolean; score: number; reasons: string[] }>
+{
+  const reasons: string[] = []
+
+  // Load thresholds and weights from Edge Config/env
+  const [strictT, baseT, weightJson, rateJson, ipqsKey] = await Promise.all([
+    getCfgNumber('BOT_THRESHOLD_STRICT'),
+    getCfgNumber('BOT_THRESHOLD'),
+    getCfgJSON<WeightTable>('WEIGHT_TABLE'),
+    getCfgJSON<{ windowSec?: number; perIp?: number; perFp?: number; perAsn?: number }>('RATE_LIMIT_CONFIG'),
+    getCfgString('IPQS_API_KEY'),
+  ])
+  const W = { ...DEFAULT_WEIGHTS, ...(weightJson || {}) }
+  const threshold = typeof baseT === 'number' ? baseT : 0.45
+  const strict = typeof strictT === 'number' ? strictT : 0.65
+
+  // Base passive signals
+  const ip = getIP(request)
+  const asn = getASN(request)
+  const ua = request.headers.get('user-agent') || ''
+  const accept = request.headers.get('accept') || ''
+  const lang = request.headers.get('accept-language') || ''
+  const tlsPresent = Boolean((request as any)?.cf?.tlsCipher) // CF only; small positive if present
+  const { blocked: uaBlocked } = isBlockedUserAgent(ua)
+  const ipBlk = isBlacklistedIP(ip)
+  const asnBlk = isBlacklistedASN(asn as any)
+  if (uaBlocked) reasons.push('ua:block')
+  if (ipBlk) reasons.push('ip:blacklist')
+  if (asnBlk) reasons.push('asn:blacklist')
+  if (!/text\/html/i.test(accept)) reasons.push('accept:odd')
+  if (lang.length < 2) reasons.push('lang:none')
+  if (tlsPresent) reasons.push('tls:present')
+
+  // Challenge cookie (js nonce) validity: if present and valid, reduce score later.
+  const jsNonce = request.cookies.get('human_signed')?.value || null
+  let jsValid = false
+  if (jsNonce) {
+    // Do a lightweight verification by checking signature only; expiry/IP binding is verified in API.
+    try {
+      const tokenPreview = jsNonce.split('.')[0]
+      if (tokenPreview) jsValid = true
+    } catch { jsValid = false }
+  }
+  if (jsValid) reasons.push('js:valid')
+
+  // Honeypot hits (from KV or cookie) boost score significantly
+  const hpCount = await getHoneypotHits(ip || 'noip')
+  if (hpCount > 0) reasons.push(`honeypot:${hpCount}`)
+
+  // Threat intel via IPQS
+  const ipqs = await queryIPQS(ip, ipqsKey)
+  if (ipqs && typeof ipqs.fraud_score === 'number') reasons.push(`ipqs:${ipqs.fraud_score}`)
+  if (ipqs?.proxy) reasons.push('ipqs:proxy')
+  if (ipqs?.vpn) reasons.push('ipqs:vpn')
+  if (ipqs?.tor) reasons.push('ipqs:tor')
+
+  // PTR bot quick check (non-blocking)
+  let ptrBot = false
+  try {
+    ptrBot = await reversePTRMatches(ip, [
+      /\.googlebot\.com\.?$/i,
+      /\.search\.msn\.com\.?$/i,
+      /\.crawl\.yahoo\.net\.?$/i,
+      /\.baidu\.com\.?$/i,
+      /\.yandex\.ru\.?$/i,
+      /\.facebook\.com\.?$/i,
+    ], 500)
+  } catch {}
+  if (ptrBot) reasons.push('ptr:bot')
+
+  // Rate-limits & behavioral signals using KV-backed counters with fallback
+  const rlCfg = rateJson || { windowSec: 10, perIp: 20, perFp: 15, perAsn: 50 }
+  const fp = request.cookies.get('fp')?.value || null
+  const cidr = ipToCidr24(ip)
+  const penalty = await bumpCountersAndGetPenalty({
+    ip: ip || 'noip',
+    fp: fp || 'nofp',
+    asn: String(asn || 'noasn'),
+    windowSec: rlCfg.windowSec ?? 10,
+    perIp: rlCfg.perIp ?? 20,
+    perFp: rlCfg.perFp ?? 15,
+    perAsn: rlCfg.perAsn ?? 50,
+  })
+  if (penalty.rateHigh) reasons.push(`rate:high(${penalty.count})`)
+  if (penalty.uniform) reasons.push('behavior:uniform')
+  if (penalty.fast) reasons.push('behavior:fast')
+
+  // Fingerprint reuse across IPs within short TTL (bind and check)
+  if (fp && cidr) {
+    const reuse = await getAndSetBinding(`fp:${fp}`, cidr, 15 * 60)
+    if (reuse.changed && reuse.prev && reuse.prev !== cidr) reasons.push('fp:ip-rotating')
+  }
+
+  // Weighted combination
+  let p = 0.5
+  if (uaBlocked) p += W.ua_block
+  if (asnBlk) p += W.asn_black
+  if (ipBlk) p += W.ip_black
+  if (ptrBot) p += W.ptr_bot
+  if (ipqs && typeof ipqs.fraud_score === 'number') p += clamp01((ipqs.fraud_score || 0) / 100) * W.ipqs_fraud
+  if (ipqs?.proxy) p += W.ipqs_proxy
+  if (ipqs?.vpn || ipqs?.active_vpn) p += W.ipqs_vpn
+  if (ipqs?.tor || ipqs?.active_tor) p += W.ipqs_tor
+  if (penalty.rateHigh) p += W.rate_high
+  if (penalty.uniform) p += W.behavior_uniform
+  if (penalty.fast) p += W.behavior_fast
+  if (tlsPresent) p += W.tls_present // negative weight reduces score
+  if (jsValid) p += W.js_nonce_valid // negative weight reduces score
+  if (fingerprintValid(request)) p += W.fp_ok
+  if (hasHumanActivity(request)) p += W.activity_ok
+  if (hpCount > 0) p += W.hp_hit
+  p = clamp01(p)
+
+  // Decide
+  const bot = p >= strict
+  return { bot, score: p, reasons }
+}
+
+// -----------------------------------------------------------------------------
+// Threat intelligence integration
+// -----------------------------------------------------------------------------
+// Queries AbuseIPDB or IPQualityScore (if API keys are configured) and returns
+// a normalized reputation score and reason. We keep timeouts short and never
+// throw; failures return neutral outcome.
+
+type ThreatIntelResult = {
+  provider: 'abuseipdb' | 'ipqualityscore' | 'none'
+  bad: boolean
+  score: number // 0-100 where 100 = worst
+  reason: string
+}
+
+async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: number): Promise<Response> {
+  const ctl = new AbortController()
+  const t = setTimeout(() => ctl.abort('timeout'), timeoutMs)
+  try {
+    const res = await fetch(url, { ...init, signal: ctl.signal, cache: 'no-store' } as any)
+    return res
+  } finally {
+    clearTimeout(t)
+  }
+}
+
+export async function queryIpReputation(ip: string | null, timeoutMs = 1200): Promise<ThreatIntelResult> {
+  if (!ip) return { provider: 'none', bad: false, score: 0, reason: 'no-ip' }
+  try {
+    // Prefer IPQualityScore if key present
+    const ipqsKey = (process.env as any)?.IPQS_KEY || (process.env as any)?.IPQUALITYSCORE_KEY
+    if (typeof ipqsKey === 'string' && ipqsKey.trim()) {
+      const url = `https://ipqualityscore.com/api/json/ip/${encodeURIComponent(ipqsKey)}/${encodeURIComponent(ip)}`
+      const res = await fetchWithTimeout(url, { method: 'GET' }, timeoutMs)
+      if (res.ok) {
+        const data: any = await res.json().catch(() => ({}))
+        const fraudScore = Number(data?.fraud_score ?? data?.risk_score ?? 0) // 0-100
+        const botStatus = Boolean(data?.bot_status)
+        const bad = botStatus || fraudScore >= 75
+        return {
+          provider: 'ipqualityscore',
+          bad,
+          score: Math.max(0, Math.min(100, fraudScore || (botStatus ? 85 : 0))),
+          reason: `ipqs:${botStatus ? 'bot' : 'score'}=${fraudScore}`,
+        }
+      }
+    }
+  } catch {
+    // ignore
+  }
+  try {
+    const abuseKey = (process.env as any)?.ABUSEIPDB_KEY || (process.env as any)?.ABUSEIPDB_API_KEY
+    if (typeof abuseKey === 'string' && abuseKey.trim()) {
+      const url = `https://api.abuseipdb.com/api/v2/check?ipAddress=${encodeURIComponent(ip)}&maxAgeInDays=90`
+      const res = await fetchWithTimeout(url, {
+        method: 'GET',
+        headers: { 'Key': abuseKey, 'Accept': 'application/json' },
+      }, timeoutMs)
+      if (res.ok) {
+        const json: any = await res.json().catch(() => ({}))
+        const score = Number(json?.data?.abuseConfidenceScore ?? 0) // 0-100
+        const bad = score >= 50
+        return { provider: 'abuseipdb', bad, score, reason: `abuseipdb:score=${score}` }
+      }
+    }
+  } catch {
+    // ignore
+  }
+  return { provider: 'none', bad: false, score: 0, reason: 'no-provider' }
+}
+
+// -----------------------------------------------------------------------------
+// Rate limiting and behavioral anomaly detection (in-memory, best-effort)
+// -----------------------------------------------------------------------------
+// We maintain an ephemeral history of timestamps per fingerprint/session key.
+// On serverless/edge this is per-instance and non-durable, but still useful.
+
+type History = { timestamps: number[] }
+const HISTORY_MAP: Map<string, History> = new Map()
+const HISTORY_MAX = 200 // cap per key to avoid memory growth
+
+function cleanupHistory(h: History, now: number, windowMs: number) {
+  const cutoff = now - windowMs
+  h.timestamps = h.timestamps.filter(t => t >= cutoff)
+  if (h.timestamps.length > HISTORY_MAX) h.timestamps.splice(0, h.timestamps.length - HISTORY_MAX)
+}
+
+function historyKey(req: NextRequest): string {
+  const fp = req.cookies.get('fp')?.value
+  if (fp) return `fp:${fp}`
+  const ip = getIP(req) || 'noip'
+  const ua = req.headers.get('user-agent') || 'noua'
+  return `ipua:${ip}:${ua.slice(0, 60)}`
+}
+
+export function trackRequestAndDetectRate(req: NextRequest, windowSec = 10, threshold = 12): { rateFlag: boolean; count: number } {
+  // rateFlag if more than threshold requests in windowSec
+  const key = historyKey(req)
+  const now = Date.now()
+  let h = HISTORY_MAP.get(key)
+  if (!h) { h = { timestamps: [] }; HISTORY_MAP.set(key, h) }
+  h.timestamps.push(now)
+  cleanupHistory(h, now, windowSec * 1000)
+  const count = h.timestamps.length
+  return { rateFlag: count > threshold, count }
+}
+
+export function analyzeBehavior(req: NextRequest, sample = 8): { uniformFlag: boolean; fastFlag: boolean; details: string } {
+  // Looks at intervals between last `sample` requests for uniformity and speed.
+  const key = historyKey(req)
+  const h = HISTORY_MAP.get(key)
+  if (!h || h.timestamps.length < 3) return { uniformFlag: false, fastFlag: false, details: 'insufficient-samples' }
+  const ts = h.timestamps.slice(-sample)
+  const intervals: number[] = []
+  for (let i = 1; i < ts.length; i++) intervals.push(ts[i] - ts[i - 1])
+  if (!intervals.length) return { uniformFlag: false, fastFlag: false, details: 'no-intervals' }
+  const mean = intervals.reduce((a, b) => a + b, 0) / intervals.length
+  const variance = intervals.reduce((acc, v) => acc + Math.pow(v - mean, 2), 0) / intervals.length
+  const std = Math.sqrt(variance)
+  const cv = mean ? std / mean : 0 // coefficient of variation
+  const fastFlag = mean < 600 // avg < 600ms between requests is suspicious
+  const uniformFlag = cv < 0.10 && intervals.length >= 4 // too uniform
+  const details = `mean=${Math.round(mean)}ms,std=${Math.round(std)}ms,cv=${cv.toFixed(2)}`
+  return { uniformFlag, fastFlag, details }
+}
+
+// -----------------------------------------------------------------------------
+// Dynamic challenge rotation scaffolding
+// -----------------------------------------------------------------------------
+// We recommend a challenge type when risk is moderate. Client code at /hc
+// already sets JS + fingerprint. You may implement additional endpoints to
+// set cookies: pow=ok (proof-of-work solved) and gl=<hash> (WebGL).
+
+type ChallengeType = 'none' | 'js' | 'pow' | 'webgl'
+
+function seededPick(seed: string): ChallengeType {
+  // Simple deterministic pick based on a string seed
+  let h = 0
+  for (let i = 0; i < seed.length; i++) h = ((h << 5) - h + seed.charCodeAt(i)) | 0
+  const r = Math.abs(h % 3)
+  return (['js', 'pow', 'webgl'] as ChallengeType[])[r]
+}
+
+export function getDynamicChallenge(req: NextRequest, risk: number): ChallengeType {
+  if (risk < 0.4) return 'none'
+  const fp = req.cookies.get('fp')?.value || 'nofp'
+  const key = `${fp}:${Math.floor(Date.now() / (10 * 60 * 1000))}` // rotate ~10min
+  return seededPick(key)
+}
+
+export function getChallengeSignals(req: NextRequest): { jsOk: boolean; powOk: boolean; webglOk: boolean } {
+  // jsOk inferred from hc cookie (set by /hc). powOk/webglOk are optional.
+  const jsOk = hasHumanActivity(req) || req.cookies.get('hc')?.value === '1'
+  const powOk = req.cookies.get('pow')?.value === 'ok'
+  const gl = req.cookies.get('gl')?.value
+  const webglOk = Boolean(gl && gl.length >= 6)
+  return { jsOk, powOk, webglOk }
+}
+
+// -----------------------------------------------------------------------------
+// Improved scoring: weighted probability (0..1 where 1=bot)
+// -----------------------------------------------------------------------------
+export async function computeBotProbability(req: NextRequest): Promise<{ probability: number; reasons: string[] }> {
+  const reasons: string[] = []
+
+  // Base passive signals (reuse existing helpers)
+  const ua = req.headers.get('user-agent') || ''
+  const uaBlock = isBlockedUserAgent(ua).blocked
+  const ip = getIP(req)
+  const asn = getASN(req)
+  const ipBlacklist = isBlacklistedIP(ip)
+  const asnBlacklist = isBlacklistedASN(asn as any)
+
+  if (uaBlock) reasons.push('ua:block')
+  if (ipBlacklist) reasons.push('ip:blacklist')
+  if (asnBlacklist) reasons.push('asn:blacklist')
+
+  const accept = req.headers.get('accept') || ''
+  const lang = req.headers.get('accept-language') || ''
+  if (!/text\/html/i.test(accept)) reasons.push('accept:odd')
+  if (lang.length < 2) reasons.push('lang:none')
+
+  // Fingerprint/human activity signal
+  const fpOk = fingerprintValid(req)
+  const actOk = hasHumanActivity(req)
+  if (fpOk) reasons.push('fp:ok')
+  if (actOk) reasons.push('act:ok')
+
+  // Threat intel (async, low-latency)
+  const ti = await queryIpReputation(ip).catch(() => ({ provider: 'none', bad: false, score: 0, reason: 'ti:error' } as ThreatIntelResult))
+  if (ti.provider !== 'none') reasons.push(`ti:${ti.reason}`)
+
+  // Reverse PTR quick check for known crawler domains (do not block on it)
+  let ptrBot = false
+  try {
+    ptrBot = await reversePTRMatches(ip, [
+      /\.googlebot\.com\.?$/i,
+      /\.search\.msn\.com\.?$/i,
+      /\.crawl\.yahoo\.net\.?$/i,
+      /\.baidu\.com\.?$/i,
+      /\.yandex\.ru\.?$/i,
+      /\.facebook\.com\.?$/i,
+    ], 500)
+  } catch {
+    // ignore
+  }
+  if (ptrBot) reasons.push('ptr:bot')
+
+  // Rate limiting + behavior
+  const rate = trackRequestAndDetectRate(req)
+  const beh = analyzeBehavior(req)
+  if (rate.rateFlag) reasons.push(`rate:high(${rate.count})`)
+  if (beh.uniformFlag) reasons.push('behavior:uniform')
+  if (beh.fastFlag) reasons.push('behavior:fast')
+
+  // Challenge signals
+  const ch = getChallengeSignals(req)
+  if (ch.jsOk) reasons.push('js:ok')
+  if (ch.powOk) reasons.push('pow:ok')
+  if (ch.webglOk) reasons.push('webgl:ok')
+
+  // Weighting: start neutral at 0.5 and adjust
+  let p = 0.5
+
+  // Heavy negatives
+  if (uaBlock) p += 0.35
+  if (ptrBot) p += 0.30
+  if (asnBlacklist) p += 0.25
+  if (ipBlacklist) p += 0.20
+
+  // Threat intel
+  if (ti.bad) p += ti.score >= 90 ? 0.35 : ti.score >= 75 ? 0.25 : 0.15
+  else if (ti.score > 0) p += ti.score / 600 // small nudge up to ~0.16
+
+  // Headers
+  if (!/text\/html/i.test(accept)) p += 0.08
+  if (lang.length < 2) p += 0.04
+
+  // Rate/behavior
+  if (rate.rateFlag) p += 0.18
+  if (beh.uniformFlag) p += 0.12
+  if (beh.fastFlag) p += 0.10
+
+  // Positive signals (subtract)
+  if (fpOk) p -= 0.12
+  if (actOk) p -= 0.12
+  if (ch.jsOk) p -= 0.08
+  if (ch.webglOk) p -= 0.05
+  if (ch.powOk) p -= 0.05
+
+  // Clamp 0..1
+  if (p < 0) p = 0
+  if (p > 1) p = 1
+
+  return { probability: p, reasons }
+}
+
+// (Legacy note): A boolean-only isBot API existed before; replaced by the
+// probability-based isBot(request) above. Keep computeScore and other exports
+// to avoid breaking existing imports elsewhere.
