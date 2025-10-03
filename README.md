@@ -45,7 +45,7 @@ Challenge Flow
 1) Middleware computes adaptive score via `utils/botCheck.isBot(req)`.
 2) If score ≥ `BOT_THRESHOLD_STRICT`: rewrite to `/safe.html`.
 3) If `BOT_THRESHOLD` ≤ score < `BOT_THRESHOLD_STRICT`: serve a minimal HTML challenge with PoW + WebGL probe, posting `{ token, solution, webgl, fpHash }` to `/api/verify-challenge`.
-4) `/api/verify-challenge` verifies the HMAC nonce, checks the /24 CIDR binding and PoW, then sets `human_signed` cookie (HMAC with TTL). Future requests fast-path to offer.
+4) `/api/verify-challenge` verifies the HMAC nonce, checks the /24 CIDR binding and PoW, and enforces provider binding (Cloudflare vs Vercel) before setting `human_signed` cookie (HMAC with TTL). Future requests fast-path to offer. On Cloudflare, the nonce also carries a TLS signature hint (cipher/version) for stronger binding (verification depends on platform APIs).
 5) Requests from untrusted IP sources (only generic headers) receive an extra penalty and are more likely to be challenged.
 
 Logging

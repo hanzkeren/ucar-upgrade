@@ -21,6 +21,17 @@ function sameCidr24(a: string, b: string): boolean {
   return pa[0]===pb[0] && pa[1]===pb[1] && pa[2]===pb[2]
 }
 
+function getReqProvider(req: NextApiRequest): 'cloudflare'|'vercel'|'unknown' {
+  // Best-effort provider detection in Pages Router (Node):
+  // - Cloudflare forwarding usually includes cf-connecting-ip
+  // - Vercel includes x-vercel-id (eg. sfo1::id)
+  const hasCF = typeof req.headers['cf-connecting-ip'] === 'string'
+  if (hasCF) return 'cloudflare'
+  const hasVercel = typeof req.headers['x-vercel-id'] === 'string' || typeof req.headers['x-vercel-ip-country'] === 'string'
+  if (hasVercel) return 'vercel'
+  return 'unknown'
+}
+
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') return res.status(405).json({ ok: false })
   try {
@@ -39,6 +50,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // IP binding: enforce /24 stability
     const ipBase = ip.split('.').slice(0,3).join('.') + '.0/24'
     if (!sameCidr24(ip.replace('/24',''), ipCidr.replace('/24',''))) return res.status(400).json({ ok: false })
+
+    // Provider binding: require provider to match what middleware observed
+    const reqProvider = getReqProvider(req)
+    if (payload?.provider && payload.provider !== reqProvider) return res.status(400).json({ ok: false })
 
     // Proof-of-work: SHA-256(token + solution) must have first 2 bytes == 0
     const cryptoMod = await import('crypto')
@@ -65,4 +80,3 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(500).json({ ok: false })
   }
 }
-

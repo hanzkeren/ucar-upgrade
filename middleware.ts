@@ -204,7 +204,18 @@ export async function middleware(req: NextRequest) {
     const ip = getIP(req)
     const fp = req.cookies.get('fp')?.value || 'nofp'
     const cidr = (ip && ip.split('.').slice(0, 3).join('.') + '.0/24') || '0.0.0.0/24'
-    const payload = JSON.stringify({ exp: Date.now() + 2 * 60 * 1000, ip_cidr: cidr, fpHash: fp.slice(0, 64) })
+    // Provider + TLS signature (when available) for stronger binding
+    const provider = ((): 'cloudflare'|'vercel'|'unknown' => {
+      if ((req as any)?.cf) return 'cloudflare'
+      if ((req as any)?.geo || req.headers.get('x-vercel-id')) return 'vercel'
+      return 'unknown'
+    })()
+    const tlsSig = ((): string | null => {
+      const cf: any = (req as any)?.cf
+      if (cf && (cf.tlsCipher || cf.tlsVersion)) return `${cf.tlsCipher || 'nc'}-${cf.tlsVersion || 'nv'}`.slice(0,64)
+      return null
+    })()
+    const payload = JSON.stringify({ exp: Date.now() + 2 * 60 * 1000, ip_cidr: cidr, fpHash: fp.slice(0, 64), provider, tlsSig })
     const token = await signPayload(payload)
     const html = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Verifying…</title></head><body>
     <main style=\"display:grid;place-items:center;min-height:100dvh;font-family:system-ui,sans-serif\">
