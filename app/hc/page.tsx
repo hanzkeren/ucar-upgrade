@@ -54,7 +54,17 @@ export default function HumanChallenge() {
           if (b[0]===0 && b[1]===0){ ok=true; break }
           n++
         }
-        const glInfo = (function(){try{const c=document.createElement('canvas');const gl=c.getContext('webgl')||c.getContext('experimental-webgl'); if(!gl) return 'nogl'; const dbg=gl.getExtension('WEBGL_debug_renderer_info'); const v=dbg?gl.getParameter(dbg.UNMASKED_VENDOR_WEBGL):'unk'; const r=dbg?gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL):'unk'; return (v+'|'+r).slice(0,128)}catch(e){return 'err'}})();
+        const glInfo = (function(){
+          try {
+            const c = document.createElement('canvas')
+            const gl = (c.getContext('webgl') || c.getContext('experimental-webgl')) as any
+            if (!gl) return 'nogl'
+            const dbg = gl.getExtension ? gl.getExtension('WEBGL_debug_renderer_info') : null
+            const v = dbg ? String(gl.getParameter(dbg.UNMASKED_VENDOR_WEBGL)) : 'unk'
+            const r = dbg ? String(gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL)) : 'unk'
+            return (v + '|' + r).slice(0, 128)
+          } catch { return 'err' }
+        })();
         const resp = await fetch('/api/verify-challenge', { method:'POST', headers:{'content-type':'application/json'}, body: JSON.stringify({ token, solution: String(n), webgl: glInfo, fpHash: fp }), credentials: 'include' })
         const out = await resp.json().catch(()=>({ok:false}))
         if (!alive) return
