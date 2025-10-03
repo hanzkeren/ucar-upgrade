@@ -68,7 +68,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // Issue a short-lived signed cookie binding session
     const ttlSec = 30 * 60
     const expVariant = typeof payload?.expVariant === 'string' ? payload.expVariant : 'control'
-    const signedPayload = JSON.stringify({ exp: Date.now() + ttlSec*1000, ip_cidr: ipBase, fpHash: String(fpHash || '').slice(0,128), exp: expVariant })
+    const signedPayload = JSON.stringify({ exp: Date.now() + ttlSec*1000, ip_cidr: ipBase, fpHash: String(fpHash || '').slice(0,128), variant: expVariant })
     const session = await signPayload(signedPayload)
     const cookie = `human_signed=${session}; Max-Age=${ttlSec}; Path=/; SameSite=Lax; HttpOnly; Secure`
     res.setHeader('Set-Cookie', cookie)
