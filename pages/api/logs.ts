@@ -3,6 +3,7 @@
 // Stores logs in KV/Redis (Upstash REST) with trimming; does not expose reads.
 
 import type { NextApiRequest, NextApiResponse } from 'next'
+import { appendLog } from '../../utils/logStore'
 import { kvSetEx } from '../../utils/rateLimiter'
 
 async function edgeConfigGet<T = unknown>(key: string): Promise<T | null> {
@@ -32,12 +33,24 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const body = req.body || (await new Promise<any>((r) => {
       let d=''; req.on('data', c=>d+=c); req.on('end', ()=>{ try{ r(JSON.parse(d||'{}')) }catch{ r({}) } })
     }))
-    // Store minimal log snapshot with TTL; avoid growth. Use session timestamp group key.
-    const key = `log:${Math.floor(Date.now()/60000)}`
-    await kvSetEx(key, '1', 5*60) // presence marker for the minute; implement real list elsewhere
+    await appendLog(body)
+    // Side-channel: store last score and experiment for the session if provided
+    try {
+      const sidPrefix = (body && typeof body.sidPrefix === 'string') ? body.sidPrefix : null
+      let exp = (body && typeof body.exp === 'string') ? body.exp : null
+      if (!exp && Array.isArray(body?.reasons)) {
+        const ex = (body.reasons as string[]).find((r)=> r.startsWith('exp:'))
+        if (ex) exp = ex.split(':',2)[1]
+      }
+      if (sidPrefix && typeof body.score === 'number') {
+        await kvSetEx(`sid:${sidPrefix}:score`, String(body.score), 60*60)
+      }
+      if (sidPrefix && exp) {
+        await kvSetEx(`sid:${sidPrefix}:exp`, exp, 60*60)
+      }
+    } catch {}
     return res.status(200).json({ ok: true })
   } catch {
     return res.status(500).json({ ok: false })
   }
 }
-

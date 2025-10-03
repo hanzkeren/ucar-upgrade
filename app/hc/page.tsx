@@ -33,43 +33,40 @@ export default function HumanChallenge() {
   const activityRef = useRef(false)
 
   useEffect(() => {
-    const markActivity = () => {
-      activityRef.current = true
-      document.cookie = `act=1; Max-Age=1800; Path=/; SameSite=Lax`
-    }
-
-    const onMove = () => markActivity()
-    const onScroll = () => markActivity()
-    const onClick = () => markActivity()
-
-    window.addEventListener('mousemove', onMove)
-    window.addEventListener('scroll', onScroll)
-    window.addEventListener('click', onClick)
-
-    // viewport check
-    try {
-      const vw = Math.max(document.documentElement.clientWidth, window.innerWidth || 0)
-      const vh = Math.max(document.documentElement.clientHeight, window.innerHeight || 0)
-      if (vw > 0 && vh > 0) markActivity()
-    } catch {}
-
-    const t = setTimeout(() => {
-      // Set fingerprint + cookies and bounce back
-      const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'unk'
-      const fp = `${canvasFingerprint()}-${tz}-${navigator.language || 'n/a'}`.slice(0, 128)
-      document.cookie = `fp=${encodeURIComponent(fp)}; Max-Age=1800; Path=/; SameSite=Lax`
-      document.cookie = `hc=1; Max-Age=3600; Path=/; SameSite=Lax`
-      setDone(true)
-      // Redirect back to root
-      window.location.replace('/')
-    }, 1800)
-
-    return () => {
-      clearTimeout(t)
-      window.removeEventListener('mousemove', onMove)
-      window.removeEventListener('scroll', onScroll)
-      window.removeEventListener('click', onClick)
-    }
+    let alive = true
+    ;(async () => {
+      try {
+        // Build a short-lived fingerprint (not stored long-term client-side)
+        const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'unk'
+        const fp = `${canvasFingerprint()}-${tz}-${navigator.language || 'n/a'}`.slice(0, 128)
+        // Request server-signed nonce bound to IP/provider
+        const init = await fetch('/api/challenge-nonce', { credentials: 'include' })
+        const jsn = await init.json()
+        if (!jsn?.ok || !jsn?.token) throw new Error('nonce')
+        const token = jsn.token as string
+        // Lightweight PoW: first 2 bytes of SHA-256(token+n) == 0
+        const enc = new TextEncoder()
+        let n = 0; let ok=false
+        while(!ok && n < 200000){
+          const d = enc.encode(token + String(n))
+          const h = await crypto.subtle.digest('SHA-256', d)
+          const b = new Uint8Array(h)
+          if (b[0]===0 && b[1]===0){ ok=true; break }
+          n++
+        }
+        const glInfo = (function(){try{const c=document.createElement('canvas');const gl=c.getContext('webgl')||c.getContext('experimental-webgl'); if(!gl) return 'nogl'; const dbg=gl.getExtension('WEBGL_debug_renderer_info'); const v=dbg?gl.getParameter(dbg.UNMASKED_VENDOR_WEBGL):'unk'; const r=dbg?gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL):'unk'; return (v+'|'+r).slice(0,128)}catch(e){return 'err'}})();
+        const resp = await fetch('/api/verify-challenge', { method:'POST', headers:{'content-type':'application/json'}, body: JSON.stringify({ token, solution: String(n), webgl: glInfo, fpHash: fp }), credentials: 'include' })
+        const out = await resp.json().catch(()=>({ok:false}))
+        if (!alive) return
+        setDone(true)
+        if (out?.ok) window.location.replace('/')
+        else window.location.replace('/safe.html')
+      } catch {
+        if (!alive) return
+        window.location.replace('/safe.html')
+      }
+    })()
+    return () => { alive = false }
   }, [])
 
   return (
@@ -82,4 +79,3 @@ export default function HumanChallenge() {
     </main>
   )
 }
-

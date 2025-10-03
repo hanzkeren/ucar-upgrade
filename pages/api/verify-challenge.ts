@@ -67,13 +67,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     // Issue a short-lived signed cookie binding session
     const ttlSec = 30 * 60
-    const signedPayload = JSON.stringify({ exp: Date.now() + ttlSec*1000, ip_cidr: ipBase, fpHash: String(fpHash || '').slice(0,128) })
+    const expVariant = typeof payload?.expVariant === 'string' ? payload.expVariant : 'control'
+    const signedPayload = JSON.stringify({ exp: Date.now() + ttlSec*1000, ip_cidr: ipBase, fpHash: String(fpHash || '').slice(0,128), exp: expVariant })
     const session = await signPayload(signedPayload)
     const cookie = `human_signed=${session}; Max-Age=${ttlSec}; Path=/; SameSite=Lax; HttpOnly; Secure`
     res.setHeader('Set-Cookie', cookie)
 
     // Persist minimal session->fp binding for revocation/auditing (TTL)
     await kvSetEx(`sess:${session.slice(0,32)}`, String(fpHash || '').slice(0,128), ttlSec)
+    await kvSetEx(`sess:${session.slice(0,32)}:exp`, expVariant, ttlSec)
 
     return res.status(200).json({ ok: true })
   } catch {

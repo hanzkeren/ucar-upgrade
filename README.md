@@ -17,6 +17,10 @@ Security Defaults
 - All challenge/session tokens are HMAC-signed server-side with TTL.
 - Optional KV (Upstash Redis REST) used for counters/bindings; graceful in-memory fallback.
 - Provider trust model: Cloudflare (`req.cf.*`) and Vercel (`req.ip`/`req.geo`) are treated as trusted IP sources. Requests with only generic headers (`x-forwarded-for`) are penalized and more likely to receive a challenge.
+- Cloudflare Bot/TLS signals (if available):
+  - Consumes Cloudflare Bot Management score (`request.cf.botManagement.score`) when present.
+  - Consumes `cf-ja3-hash` header (Enterprise) and compares against optional `JA3_BAD_LIST`.
+  - These signals have strong influence (harder to spoof vs generic headers).
 
 Local Development
 - `npm install`
@@ -35,6 +39,16 @@ Edge Config Keys (add these items in your Edge Config store)
   - `RATE_LIMIT_CONFIG` (JSON): {"windowSec":10,"perIp":20,"perFp":15,"perAsn":50}
   - `WEIGHT_TABLE` (JSON): override feature weights.
 - `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN`: enable KV for counters.
+- Optional logs:
+  - `LOGS_LIST_KEY` (string, default `logs`): KV list key for redacted logs.
+  - `LOGS_WEBHOOK_URL` (string) and `LOGS_WEBHOOK_TOKEN` (string): outbound alert/webhook.
+ - Optional CF TLS/JA3:
+   - `JA3_BAD_LIST` (JSON array of strings): JA3 hashes to penalize.
+ - Optional A/B:
+   - `EXPERIMENT_MODE` ('off'|'ab'), `EXPERIMENT_SALT`, `EXPERIMENT_SPLIT_A`, `EXPERIMENT_SPLIT_B`.
+   - `BOT_THRESHOLD_A/B`, `BOT_THRESHOLD_STRICT_A/B`, `WEIGHT_TABLE_A/B`.
+ - Optional analytics:
+   - `ANALYTICS_API_TOKEN` bearer token for mark-conversion/mark-fraud endpoints.
 
 Offer Configuration
 - Preferred (and default): set `OFFER_URL` in Edge Config; changes take effect without redeploy after initial binding.
@@ -50,7 +64,9 @@ Challenge Flow
 
 Logging
 - Middleware POSTs to `/api/logs` with Authorization: `Bearer ${LOGS_API_TOKEN}`.
-- Endpoint stores a minimal presence marker in KV; adapt to persist detailed events if needed.
+- Endpoint writes redacted events to KV (Upstash REST) as a capped list (LPUSH+LTRIM):
+  - IP redacted to /24 (`ip_cidr`), UA hashed (`ua_hash`), decisions, reasons, score.
+  - Optional webhook fanout via `LOGS_WEBHOOK_URL` (+ `LOGS_WEBHOOK_TOKEN`).
 
 Deployment on Vercel
 - Connect your Edge Config store to the project (Edge Config → Connect to Project) and add items above. Redeploy once to bind; subsequent Edge Config changes do not require redeploy.
@@ -67,6 +83,11 @@ Tuning & Extensibility
 - Adjust UA/ASN/CIDR lists in `utils/botCheck.ts`.
 - Override weights/thresholds via Edge Config items (`WEIGHT_TABLE`, `BOT_THRESHOLD*`).
 - Improve KV persistence/analytics by replacing the minimal `/api/logs` sink.
+- A/B & Adaptive Scoring:
+  - Experiment assignment via `utils/experiments.ts` using `EXPERIMENT_MODE=ab`, `EXPERIMENT_SALT`, and split vars `EXPERIMENT_SPLIT_A/B`.
+  - Variant overrides: `BOT_THRESHOLD_{VAR}`, `BOT_THRESHOLD_STRICT_{VAR}`, `WEIGHT_TABLE_{VAR}`.
+  - Telemetry endpoints to record outcomes: POST `/api/mark-conversion` and `/api/mark-fraud` (Authorization: `Bearer ${ANALYTICS_API_TOKEN}`) with `{ exp, score }`.
+  - Metrics stored in KV under `metrics:exp:<VAR>:bucket:<0-9>:{conv|fraud}` for offline tuning and dashboards.
 
 Tests
 - Jest stubs provided:

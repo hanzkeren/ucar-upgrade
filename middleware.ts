@@ -18,11 +18,13 @@ import {
   isBot as isBotAdvanced,
 } from './utils/botCheck'
 import { signPayload } from './utils/nonce'
+import { getExperimentConfig } from './utils/experiments'
 
 async function logDecision(req: NextRequest, decision: 'offer' | 'safe' | 'challenge' | 'bypass', reasons: string[], score?: number) {
   try {
     const origin = req.nextUrl.origin
     const logsToken = (await edgeGet('LOGS_API_TOKEN')) || (process.env as any)?.LOGS_API_TOKEN
+    const sid = req.cookies.get('human_signed')?.value || null
     const payload = {
       ts: Date.now(),
       path: req.nextUrl.pathname,
@@ -33,6 +35,7 @@ async function logDecision(req: NextRequest, decision: 'offer' | 'safe' | 'chall
       decision,
       reasons,
       score: score ?? null,
+      sidPrefix: sid ? String(sid).slice(0, 32) : null,
     }
     // Fire-and-forget; don't block middleware
     fetch(`${origin}/api/logs`, {
@@ -190,9 +193,11 @@ export async function middleware(req: NextRequest) {
   // Advanced ensemble scoring and challenge
   const adv = await isBotAdvanced(req)
   const ipUntrusted = (await import('./utils/botCheck')).isIpFromUntrustedSource(req)
-  const baseT = Number(((await edgeGet('BOT_THRESHOLD')) as any) || (process.env as any)?.BOT_THRESHOLD || 0.45)
-  const strictT = Number(((await edgeGet('BOT_THRESHOLD_STRICT')) as any) || (process.env as any)?.BOT_THRESHOLD_STRICT || 0.65)
-  const reasonsAdv = [`p=${adv.score.toFixed(2)}`, ...adv.reasons]
+  const seed = `${getIP(req) || 'noip'}:${req.headers.get('user-agent') || ''}`
+  const exp = await getExperimentConfig(seed)
+  const baseT = exp.botThreshold
+  const strictT = exp.botThresholdStrict
+  const reasonsAdv = [`p=${adv.score.toFixed(2)}`, `exp:${exp.variant}`, ...adv.reasons]
 
   if (adv.bot || adv.score >= strictT) {
     await logDecision(req, 'safe', ['adv:strict', ...reasonsAdv], Math.round(adv.score * 100))
@@ -215,7 +220,7 @@ export async function middleware(req: NextRequest) {
       if (cf && (cf.tlsCipher || cf.tlsVersion)) return `${cf.tlsCipher || 'nc'}-${cf.tlsVersion || 'nv'}`.slice(0,64)
       return null
     })()
-    const payload = JSON.stringify({ exp: Date.now() + 2 * 60 * 1000, ip_cidr: cidr, fpHash: fp.slice(0, 64), provider, tlsSig })
+    const payload = JSON.stringify({ exp: Date.now() + 2 * 60 * 1000, ip_cidr: cidr, fpHash: fp.slice(0, 64), provider, tlsSig, expVariant: exp.variant })
     const token = await signPayload(payload)
     const html = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Verifying…</title></head><body>
     <main style=\"display:grid;place-items:center;min-height:100dvh;font-family:system-ui,sans-serif\">

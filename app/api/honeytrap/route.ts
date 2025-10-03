@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server'
 import { incHoneypot, watchASN } from '../../../utils/rateLimiter'
+import { appendLog } from '../../../utils/logStore'
 import { getIP, getASN } from '../../../utils/botCheck'
 
 export const runtime = 'edge'
@@ -12,6 +13,21 @@ export async function GET(req: NextRequest) {
     await incHoneypot(ip)
     const asn = getASN(req)
     if (asn != null) watchASN(String(asn), 2 * 60 * 60) // watch this ASN for 2 hours
+    // Emit a redacted honeypot log event (KV + optional webhook)
+    try {
+      await appendLog({
+        ts: Date.now(),
+        path: req.nextUrl.pathname,
+        ip,
+        ua: req.headers.get('user-agent') || '',
+        asn: asn as any,
+        country: (req as any)?.cf?.country || req.geo?.country || req.headers.get('cf-ipcountry') || null,
+        decision: 'safe',
+        reasons: ['honeypot:hit'],
+        score: null,
+        event: 'honeypot',
+      })
+    } catch {}
   } catch {}
   const url = new URL('/safe.html', req.url)
   const res = Response.redirect(url, 302)

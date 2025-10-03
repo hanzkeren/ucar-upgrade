@@ -442,6 +442,11 @@ type WeightTable = {
   fp_ok?: number
   activity_ok?: number
   hp_hit?: number
+  cf_bad_high?: number
+  cf_bad_med?: number
+  cf_bad_low?: number
+  cf_good?: number
+  ja3_bad?: number
 }
 
 const DEFAULT_WEIGHTS: Required<WeightTable> = {
@@ -459,9 +464,14 @@ const DEFAULT_WEIGHTS: Required<WeightTable> = {
   behavior_fast: 0.10,
   tls_present: -0.04,
   js_nonce_valid: -0.10,
-  fp_ok: -0.10,
-  activity_ok: -0.10,
+  fp_ok: -0.06,
+  activity_ok: -0.04,
   hp_hit: 0.50,
+  cf_bad_high: 0.40,
+  cf_bad_med: 0.25,
+  cf_bad_low: 0.12,
+  cf_good: -0.08,
+  ja3_bad: 0.30,
 }
 
 function clamp01(n: number) { return n < 0 ? 0 : n > 1 ? 1 : n }
@@ -492,18 +502,30 @@ export function isIpFromUntrustedSource(req: NextRequest): boolean {
   return ctx.ipSource === 'header' || ctx.ipSource === 'none'
 }
 
+function getCloudflareSignals(req: NextRequest): { botScore: number | null; ja3: string | null } {
+  try {
+    const cf: any = (req as any)?.cf || {}
+    // Bot Management score (Enterprise): 1..99; lower = more likely bot
+    const bmScore = typeof cf?.botManagement?.score === 'number' ? cf.botManagement.score : null
+    // Header-based JA3 hash if present
+    const h = req.headers.get('cf-ja3-hash') || null
+    return { botScore: bmScore, ja3: h }
+  } catch { return { botScore: null, ja3: null } }
+}
+
 // Public API (new): returns probability-like score in [0,1]
 export async function isBot(request: NextRequest): Promise<{ bot: boolean; score: number; reasons: string[] }>
 {
   const reasons: string[] = []
 
   // Load thresholds and weights from Edge Config/env
-  const [strictT, baseT, weightJson, rateJson, ipqsKey] = await Promise.all([
+  const [strictT, baseT, weightJson, rateJson, ipqsKey, ja3BadList] = await Promise.all([
     getCfgNumber('BOT_THRESHOLD_STRICT'),
     getCfgNumber('BOT_THRESHOLD'),
     getCfgJSON<WeightTable>('WEIGHT_TABLE'),
     getCfgJSON<{ windowSec?: number; perIp?: number; perFp?: number; perAsn?: number }>('RATE_LIMIT_CONFIG'),
     getCfgString('IPQS_API_KEY'),
+    getCfgJSON<string[]>('JA3_BAD_LIST'),
   ])
   const W = { ...DEFAULT_WEIGHTS, ...(weightJson || {}) }
   const threshold = typeof baseT === 'number' ? baseT : 0.45
@@ -521,6 +543,7 @@ export async function isBot(request: NextRequest): Promise<{ bot: boolean; score
   const asnBlk = isBlacklistedASN(asn as any)
   const ctx = getProviderContext(request)
   const ipUntrusted = ctx.ipSource === 'header' || ctx.ipSource === 'none'
+  const cfSig = getCloudflareSignals(request)
   if (uaBlocked) reasons.push('ua:block')
   if (ipBlk) reasons.push('ip:blacklist')
   if (asnBlk) reasons.push('asn:blacklist')
@@ -528,6 +551,8 @@ export async function isBot(request: NextRequest): Promise<{ bot: boolean; score
   if (lang.length < 2) reasons.push('lang:none')
   if (tlsPresent) reasons.push('tls:present')
   if (ipUntrusted) reasons.push('ip:untrusted-source')
+  if (cfSig.botScore != null) reasons.push(`cf:botScore:${cfSig.botScore}`)
+  if (cfSig.ja3) reasons.push(`cf:ja3:${cfSig.ja3.slice(0,12)}`)
 
   // Dynamic ASN watchlist (escalated due to honeypot hits)
   const asnWatched = isASNWatched(asn)
@@ -608,6 +633,19 @@ export async function isBot(request: NextRequest): Promise<{ bot: boolean; score
   if (penalty.fast) p += W.behavior_fast
   if (ipUntrusted) p += W.ip_untrusted
   if (asnWatched) p += 0.12
+  // Cloudflare Bot Management score influence (if available)
+  if (cfSig.botScore != null) {
+    const s = cfSig.botScore
+    if (s < 10) p += W.cf_bad_high
+    else if (s < 30) p += W.cf_bad_med
+    else if (s < 50) p += W.cf_bad_low
+    else if (s >= 70) p += W.cf_good
+  }
+  // JA3 badlist (Edge Config configurable)
+  if (cfSig.ja3 && Array.isArray(ja3BadList) && ja3BadList.includes(cfSig.ja3)) {
+    p += W.ja3_bad
+    reasons.push('cf:ja3:badlist')
+  }
   if (tlsPresent) p += W.tls_present // negative weight reduces score
   if (jsValid) p += W.js_nonce_valid // negative weight reduces score
   if (fingerprintValid(request)) p += W.fp_ok
@@ -770,8 +808,9 @@ export function getDynamicChallenge(req: NextRequest, risk: number): ChallengeTy
 }
 
 export function getChallengeSignals(req: NextRequest): { jsOk: boolean; powOk: boolean; webglOk: boolean } {
-  // jsOk inferred from hc cookie (set by /hc). powOk/webglOk are optional.
-  const jsOk = hasHumanActivity(req) || req.cookies.get('hc')?.value === '1'
+  // jsOk inferred from the presence of a server-signed cookie (human_signed)
+  // rather than client-set /hc flags to reduce replay risk. powOk/webglOk are optional.
+  const jsOk = Boolean(req.cookies.get('human_signed')?.value)
   const powOk = req.cookies.get('pow')?.value === 'ok'
   const gl = req.cookies.get('gl')?.value
   const webglOk = Boolean(gl && gl.length >= 6)
