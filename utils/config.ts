@@ -10,8 +10,8 @@ export async function getOfferUrlRuntime(): Promise<string | null> {
   } catch {
     // ignore
   }
-  // 2) Fallback to environment variable (requires redeploy on Vercel)
-  const env = (process.env as any)?.NEXT_PUBLIC_OFFER_URL as string | undefined
+  // 2) Optional server-only environment variable (does not leak to client)
+  const env = (process.env as any)?.OFFER_URL as string | undefined
   if (env && /^https?:\/\//i.test(env)) return env
   return null
 }

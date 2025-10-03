@@ -18,7 +18,10 @@
       <h1>Welcome</h1>
       <p>This is a neutral landing page. If an active offer is configured, you will be redirected server‑side. Otherwise, you can safely close this tab.</p>
     </main>
-    <script>
+    <!-- Honeypot traps: bots that traverse hidden links will be flagged -->
+    <a href="/api/honeytrap" style="display:none" rel="nofollow">hp</a>
+    <img src="/api/px?hp=1" alt="" width="1" height="1" style="display:none"/>
+  <script>
       // Intentionally no client-side redirect here to avoid exposing or leaking
       // destination URLs. Middleware performs server-side redirects to any
       // configured OFFER_URL.

@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server'
-import { incHoneypot } from '../../../utils/rateLimiter'
-import { getIP } from '../../../utils/botCheck'
+import { incHoneypot, watchASN } from '../../../utils/rateLimiter'
+import { getIP, getASN } from '../../../utils/botCheck'
 
 export const runtime = 'edge'
 
@@ -10,6 +10,8 @@ export async function GET(req: NextRequest) {
   try {
     const ip = getIP(req) || 'noip'
     await incHoneypot(ip)
+    const asn = getASN(req)
+    if (asn != null) watchASN(String(asn), 2 * 60 * 60) // watch this ASN for 2 hours
   } catch {}
   const url = new URL('/safe.html', req.url)
   const res = Response.redirect(url, 302)

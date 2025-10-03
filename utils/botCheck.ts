@@ -419,6 +419,7 @@ async function queryIPQS(ip: string | null, key: string | null, timeoutMs = 1200
 // -----------------------------------------------------------------------------
 import { bumpCountersAndGetPenalty, getAndSetBinding, getHoneypotHits } from './rateLimiter'
 import { signPayload } from './nonce'
+import { isASNWatched } from './rateLimiter'
 
 // -----------------------------------------------------------------------------
 // New adaptive scoring ensemble
@@ -427,6 +428,7 @@ type WeightTable = {
   ua_block?: number
   asn_black?: number
   ip_black?: number
+  ip_untrusted?: number
   ipqs_fraud?: number
   ipqs_proxy?: number
   ipqs_vpn?: number
@@ -446,6 +448,7 @@ const DEFAULT_WEIGHTS: Required<WeightTable> = {
   ua_block: 0.35,
   asn_black: 0.25,
   ip_black: 0.20,
+  ip_untrusted: 0.15,
   ipqs_fraud: 0.28,
   ipqs_proxy: 0.18,
   ipqs_vpn: 0.18,
@@ -462,6 +465,32 @@ const DEFAULT_WEIGHTS: Required<WeightTable> = {
 }
 
 function clamp01(n: number) { return n < 0 ? 0 : n > 1 ? 1 : n }
+
+// Provider context + IP trust assessment. We avoid trusting arbitrary
+// client-provided headers; when only generic headers are available we add a
+// penalty and prefer issuing a challenge.
+function getProviderContext(req: NextRequest): { provider: 'cloudflare'|'vercel'|'unknown'; ipSource: 'cf'|'vercel'|'header'|'none' } {
+  const hasCF = !!(req as any)?.cf
+  if (hasCF) {
+    // On Cloudflare, prefer cf-connecting-ip and cf.asn; considered trusted.
+    const ip = req.headers.get('cf-connecting-ip')
+    return { provider: 'cloudflare', ipSource: ip ? 'cf' : 'none' }
+  }
+  // Vercel Edge provides req.ip and req.geo.asn; treat as trusted.
+  const hasVercelGeo = !!(req as any)?.geo || typeof (req as any)?.ip === 'string'
+  if (hasVercelGeo) {
+    const ip = (req as any).ip || req.headers.get('x-real-ip')
+    return { provider: 'vercel', ipSource: ip ? 'vercel' : 'none' }
+  }
+  // Otherwise, only generic headers like x-forwarded-for are available.
+  const xff = req.headers.get('x-forwarded-for')
+  return { provider: 'unknown', ipSource: xff ? 'header' : 'none' }
+}
+
+export function isIpFromUntrustedSource(req: NextRequest): boolean {
+  const ctx = getProviderContext(req)
+  return ctx.ipSource === 'header' || ctx.ipSource === 'none'
+}
 
 // Public API (new): returns probability-like score in [0,1]
 export async function isBot(request: NextRequest): Promise<{ bot: boolean; score: number; reasons: string[] }>
@@ -490,12 +519,19 @@ export async function isBot(request: NextRequest): Promise<{ bot: boolean; score
   const { blocked: uaBlocked } = isBlockedUserAgent(ua)
   const ipBlk = isBlacklistedIP(ip)
   const asnBlk = isBlacklistedASN(asn as any)
+  const ctx = getProviderContext(request)
+  const ipUntrusted = ctx.ipSource === 'header' || ctx.ipSource === 'none'
   if (uaBlocked) reasons.push('ua:block')
   if (ipBlk) reasons.push('ip:blacklist')
   if (asnBlk) reasons.push('asn:blacklist')
   if (!/text\/html/i.test(accept)) reasons.push('accept:odd')
   if (lang.length < 2) reasons.push('lang:none')
   if (tlsPresent) reasons.push('tls:present')
+  if (ipUntrusted) reasons.push('ip:untrusted-source')
+
+  // Dynamic ASN watchlist (escalated due to honeypot hits)
+  const asnWatched = isASNWatched(asn)
+  if (asnWatched) reasons.push('asn:watch')
 
   // Challenge cookie (js nonce) validity: if present and valid, reduce score later.
   const jsNonce = request.cookies.get('human_signed')?.value || null
@@ -570,6 +606,8 @@ export async function isBot(request: NextRequest): Promise<{ bot: boolean; score
   if (penalty.rateHigh) p += W.rate_high
   if (penalty.uniform) p += W.behavior_uniform
   if (penalty.fast) p += W.behavior_fast
+  if (ipUntrusted) p += W.ip_untrusted
+  if (asnWatched) p += 0.12
   if (tlsPresent) p += W.tls_present // negative weight reduces score
   if (jsValid) p += W.js_nonce_valid // negative weight reduces score
   if (fingerprintValid(request)) p += W.fp_ok

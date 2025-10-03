@@ -189,6 +189,7 @@ export async function middleware(req: NextRequest) {
 
   // Advanced ensemble scoring and challenge
   const adv = await isBotAdvanced(req)
+  const ipUntrusted = (await import('./utils/botCheck')).isIpFromUntrustedSource(req)
   const baseT = Number(((await edgeGet('BOT_THRESHOLD')) as any) || (process.env as any)?.BOT_THRESHOLD || 0.45)
   const strictT = Number(((await edgeGet('BOT_THRESHOLD_STRICT')) as any) || (process.env as any)?.BOT_THRESHOLD_STRICT || 0.65)
   const reasonsAdv = [`p=${adv.score.toFixed(2)}`, ...adv.reasons]
@@ -198,7 +199,7 @@ export async function middleware(req: NextRequest) {
     return makeRewrite('/safe.html', 'safe', ['adv:strict', ...reasonsAdv])
   }
 
-  if (adv.score >= baseT && adv.score < strictT) {
+  if (adv.score >= baseT && adv.score < strictT || (ipUntrusted && adv.score >= baseT - 0.05)) {
     // Medium risk: issue a lightweight JS+PoW challenge with a signed nonce bound to IP CIDR
     const ip = getIP(req)
     const fp = req.cookies.get('fp')?.value || 'nofp'

@@ -4,16 +4,19 @@ Overview
 - Edge Middleware runs a multi-layer bot filter: UA/ASN/IP, reverse DNS, behavior, fingerprint, threat intel (IPQualityScore), rate limiting, and adaptive scoring. Bots → `public/safe.html`; humans → OFFER_URL or `public/offer.html` fallback.
 - Hardened modules:
   - `utils/botCheck.ts`: adaptive ensemble scoring, IPQS integration, Edge Config–driven thresholds/weights, KV-backed rate limits and honeypot boosts.
+  - Multi-honeypot: hidden traps in `public/safe.html` and `public/offer.html` link to `/api/honeytrap`, `/api/decoy/feed`, and a pixel `/api/px?hp=1`.
   - `utils/nonce.ts`: HMAC-signed nonces/cookies with TTL and optional IP/TLS/fingerprint binding.
   - `utils/rateLimiter.ts`: Edge-friendly counters on Redis (Upstash) with in-memory fallback.
   - Middleware: issues a lightweight JS+PoW challenge for medium-risk sessions and fast-path for signed sessions.
   - `pages/api/verify-challenge.ts`: verifies signed nonce, PoW, CIDR binding; sets `human_signed` cookie.
   - `pages/api/logs.ts`: protected logging sink (Authorization: Bearer), no public read.
+  - ASN watchlist escalation: honeypot hits promote ASN to a temporary watchlist that increases bot score.
 
 Security Defaults
 - Secrets and thresholds read from Vercel Edge Config (preferred) or environment. Never use `NEXT_PUBLIC_*` for secrets.
 - All challenge/session tokens are HMAC-signed server-side with TTL.
 - Optional KV (Upstash Redis REST) used for counters/bindings; graceful in-memory fallback.
+- Provider trust model: Cloudflare (`req.cf.*`) and Vercel (`req.ip`/`req.geo`) are treated as trusted IP sources. Requests with only generic headers (`x-forwarded-for`) are penalized and more likely to receive a challenge.
 
 Local Development
 - `npm install`
@@ -31,11 +34,11 @@ Edge Config Keys (add these items in your Edge Config store)
 - Optional:
   - `RATE_LIMIT_CONFIG` (JSON): {"windowSec":10,"perIp":20,"perFp":15,"perAsn":50}
   - `WEIGHT_TABLE` (JSON): override feature weights.
-  - `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN`: enable KV for counters.
+- `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN`: enable KV for counters.
 
 Offer Configuration
-- Preferred: set `OFFER_URL` in Edge Config; changes take effect without redeploy after initial binding.
-- Fallback: env var `NEXT_PUBLIC_OFFER_URL` (server reads it if Edge Config unset).
+- Preferred (and default): set `OFFER_URL` in Edge Config; changes take effect without redeploy after initial binding.
+- Optional server-only fallback: environment variable `OFFER_URL` (no `NEXT_PUBLIC_*`).
 - `public/offer.html` is a neutral, noindex placeholder. Actual redirects are server-side.
 
 Challenge Flow
@@ -43,6 +46,7 @@ Challenge Flow
 2) If score ≥ `BOT_THRESHOLD_STRICT`: rewrite to `/safe.html`.
 3) If `BOT_THRESHOLD` ≤ score < `BOT_THRESHOLD_STRICT`: serve a minimal HTML challenge with PoW + WebGL probe, posting `{ token, solution, webgl, fpHash }` to `/api/verify-challenge`.
 4) `/api/verify-challenge` verifies the HMAC nonce, checks the /24 CIDR binding and PoW, then sets `human_signed` cookie (HMAC with TTL). Future requests fast-path to offer.
+5) Requests from untrusted IP sources (only generic headers) receive an extra penalty and are more likely to be challenged.
 
 Logging
 - Middleware POSTs to `/api/logs` with Authorization: `Bearer ${LOGS_API_TOKEN}`.

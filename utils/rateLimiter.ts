@@ -44,6 +44,8 @@ async function kvFetch(path: string, body?: any): Promise<any | null> {
 // In-memory fallback store
 type Entry = { v: number | string; exp: number; times?: number[] }
 const MEM = new Map<string, Entry>()
+// ASN watchlist (ephemeral): asn -> expiry
+const ASN_WATCH = new Map<string, number>()
 
 function memGet(key: string): Entry | undefined {
   const e = MEM.get(key)
@@ -113,6 +115,20 @@ export async function incHoneypot(ip: string, ttlSec = 6 * 60 * 60): Promise<voi
   if (!count) memSet(key, 1, ttlSec)
 }
 
+export function watchASN(asn: string, ttlSec = 60 * 60): void {
+  const exp = Date.now() + ttlSec * 1000
+  ASN_WATCH.set(String(asn), exp)
+}
+
+export function isASNWatched(asn: string | number | null | undefined): boolean {
+  if (!asn && asn !== 0) return false
+  const key = String(asn)
+  const exp = ASN_WATCH.get(key)
+  if (!exp) return false
+  if (Date.now() > exp) { ASN_WATCH.delete(key); return false }
+  return true
+}
+
 export async function bumpCountersAndGetPenalty(opts: {
   ip: string; fp: string; asn: string; windowSec: number; perIp: number; perFp: number; perAsn: number
 }): Promise<Penalty> {
@@ -148,4 +164,3 @@ export async function bumpCountersAndGetPenalty(opts: {
   }
   return { rateHigh, count, uniform, fast }
 }
-
