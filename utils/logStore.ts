@@ -54,16 +54,26 @@ function toCidr24(ip: string | null): string | null {
   return `${p[0]}.${p[1]}.${p[2]}.0/24`
 }
 
+function fnv1a32Hex(str: string): string {
+  let h = 0x811c9dc5 >>> 0
+  for (let i = 0; i < str.length; i++) {
+    h ^= str.charCodeAt(i) & 0xff
+    h = Math.imul(h, 0x01000193) >>> 0
+  }
+  return ('00000000' + h.toString(16)).slice(-8)
+}
+
 async function sha256Hex(str: string): Promise<string> {
   try {
-    const enc = new TextEncoder().encode(str)
-    // @ts-ignore
-    const h = await (globalThis.crypto?.subtle || (await import('crypto')).webcrypto.subtle).digest('SHA-256', enc)
-    const b = new Uint8Array(h)
-    return Array.from(b).map(x=>x.toString(16).padStart(2,'0')).join('')
-  } catch {
-    return 'na'
-  }
+    if (globalThis.crypto && globalThis.crypto.subtle) {
+      const enc = new TextEncoder().encode(str)
+      const h = await globalThis.crypto.subtle.digest('SHA-256', enc)
+      const b = new Uint8Array(h)
+      return Array.from(b).map(x=>x.toString(16).padStart(2,'0')).join('')
+    }
+  } catch {}
+  // Fallback (Edge-incompatible crypto): use FNV-1a 32-bit as a lightweight hash
+  return fnv1a32Hex(str)
 }
 
 export async function appendLog(entry: LogEntry): Promise<void> {
@@ -100,4 +110,3 @@ export async function appendLog(entry: LogEntry): Promise<void> {
     }
   } catch {}
 }
-
