@@ -1,18 +1,157 @@
 
 <!doctype html>
-<html lang="en">
+<html lang="id" data-theme="tech">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Glamping</title>
-  <meta name="robots" content="index,follow">
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Selamat Datang</title>
+  <meta name="robots" content="index,follow" />
+  <meta name="color-scheme" content="light" />
   <style>
-    html,body{margin:0;padding:0}
-    img{max-width:100%;height:auto;display:block;margin:0 auto}
+    :root {
+      --bg: #f7f9fb;
+      --card: #ffffff;
+      --text: #0f172a;
+      --muted: #5b6576;
+      --border: #e6eaf0;
+      --brand: #0d6efd;
+      --brand-2: #5aa0ff;
+      --shadow: 0 10px 30px rgba(2, 24, 55, 0.08);
+      --radius: 14px;
+    }
+    /* Tema: Corporate Tech (default) */
+    [data-theme="tech"] {
+      --bg: #f7f9fb;
+      --card: #ffffff;
+      --text: #0f172a;
+      --muted: #5b6576;
+      --border: #e6eaf0;
+      --brand: #0d6efd;
+      --brand-2: #5aa0ff;
+    }
+    /* Tema: Finance (navy + gold) */
+    [data-theme="finance"] {
+      --bg: #f8fafc;
+      --card: #ffffff;
+      --text: #0e1320;
+      --muted: #5c6473;
+      --border: #e7ebf1;
+      --brand: #142257;   /* navy */
+      --brand-2: #d4a017; /* gold */
+    }
+    * { box-sizing: border-box }
+    html, body { height: 100% }
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(1200px 600px at 10% -10%, #ffffff 0%, rgba(255,255,255,0) 60%),
+        radial-gradient(1200px 600px at 110% -30%, #edf3ff 0%, rgba(237,243,255,0) 60%),
+        var(--bg);
+      display: grid;
+      place-items: center;
+      padding: 32px 20px;
+    }
+    .wrap { width: 100%; max-width: 960px }
+    .shell {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 18px 22px;
+      border-bottom: 1px solid var(--border);
+    }
+    .brand {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 600;
+      letter-spacing: .2px;
+    }
+    .badge {
+      width: 24px; height: 24px; border-radius: 6px;
+      background: linear-gradient(135deg, var(--brand), var(--brand-2));
+      box-shadow: 0 4px 14px rgba(13, 110, 253, .35);
+    }
+    .main { padding: 38px 28px }
+    .hero {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 18px;
+      align-items: start;
+    }
+    .title { font-size: clamp(24px, 3.2vw, 32px); margin: 0 }
+    .lead  { margin: 0; color: var(--muted); line-height: 1.6 }
+    .actions { margin-top: 14px; display: flex; gap: 10px; flex-wrap: wrap }
+    .btn {
+      appearance: none; border: 0; cursor: pointer;
+      display: inline-flex; align-items: center; gap: 8px;
+      height: 38px; padding: 0 14px; border-radius: 10px;
+      font-weight: 600; letter-spacing: .2px; text-decoration: none;
+    }
+    .btn-primary { color: #fff; background: var(--brand); box-shadow: 0 6px 18px rgba(13,110,253,.25) }
+    .btn-ghost   { color: var(--text); background: #f2f5f8; border: 1px solid var(--border) }
+    .footer {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 16px 22px; border-top: 1px solid var(--border); color: var(--muted);
+      font-size: 13px;
+    }
+    @media (min-width: 880px) {
+      .hero { grid-template-columns: 1.15fr .85fr; align-items: center }
+      .illustration { justify-self: end }
+    }
+    .illu-card { width: 100%; max-width: 380px; aspect-ratio: 4/3; border-radius: 12px; overflow: hidden; border: 1px solid var(--border); box-shadow: var(--shadow); background: #f4f7fb }
+    .illu-card img { width: 100%; height: 100%; object-fit: cover; display: block }
   </style>
+  <meta name="description" content="Halaman aman bergaya corporate: simple, clean, modern, ramah untuk pengunjung dan cocok untuk kampanye iklan." />
+  <meta name="format-detection" content="telephone=no" />
 </head>
 <body>
-  <a href="#" rel="nofollow noopener"><img src="/glamping.jpg" alt="Glamping tent"></a>
+  <div class="wrap">
+    <div class="shell" role="region" aria-label="Konten">
+      <header class="header" role="banner">
+        <div class="brand" aria-label="Brand">
+          <span class="badge" aria-hidden="true"></span>
+          <span>Official</span>
+        </div>
+      </header>
+      <main class="main" id="main" role="main">
+        <section class="hero" aria-labelledby="t">
+          <div>
+            <h1 id="t" class="title">Selamat datang</h1>
+            <p class="lead">Tampilan profesional yang sederhana dan nyaman dibaca. Pengalaman Anda kami jaga secara otomatis.</p>
+            <div class="actions">
+              <a class="btn btn-primary" href="/" rel="nofollow">Beranda</a>
+              <a class="btn btn-ghost" href="#main">Pelajari lebih lanjut</a>
+            </div>
+          </div>
+          <div class="illustration">
+            <figure class="illu-card">
+              <img src="/hero-1200.jpg" alt="Suasana kerja tim profesional di ruang meeting" width="1200" height="787" loading="eager" fetchpriority="high" decoding="async" />
+            </figure>
+          </div>
+        </section>
+      </main>
+      <footer class="footer" role="contentinfo">
+        <span>© <span id="y"></span></span>
+        <span>Akses aman • Privasi dijaga</span>
+        <span style="opacity:.9">Foto: Unsplash</span>
+      </footer>
+    </div>
+  </div>
+
+  <script>
+    // Tahun dinamis tanpa dependensi eksternal
+    document.getElementById('y').textContent = new Date().getFullYear();
+  </script>
+
   <!-- Honeypot traps: hidden links that automated crawlers may follow -->
   <a href="/api/honeytrap" style="position:absolute;left:-9999px;top:-9999px" rel="nofollow">do-not-click</a>
   <a href="/api/decoy/feed" style="display:none" rel="nofollow">feed</a>
