@@ -1,154 +1,284 @@
 
 <!doctype html>
-<html lang="id" data-theme="tech">
+<html lang="id">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Selamat Datang</title>
+  <title>FlowerStore — Buket & Hadiah Online</title>
   <meta name="robots" content="index,follow" />
   <meta name="color-scheme" content="light" />
+  <meta name="description" content="FlowerStore: rangkaian bunga segar, buket, hampers, dan hadiah untuk momen spesial. Pengiriman cepat dan aman ke banyak kota di Indonesia." />
+  <meta name="format-detection" content="telephone=no" />
   <style>
     :root {
-      --bg: #f7f9fb;
-      --card: #ffffff;
+      --bg: #ffffff;
       --text: #0f172a;
-      --muted: #5b6576;
-      --border: #e6eaf0;
-      --brand: #0d6efd;
-      --brand-2: #5aa0ff;
+      --muted: #64748b;
+      --border: #e2e8f0;
+      --card: #ffffff;
+      --pink: #be185d;
+      --pink-600: #db2777;
+      --pink-700: #be185d;
+      --pink-800: #9d174d;
       --shadow: 0 10px 30px rgba(2, 24, 55, 0.08);
-      --radius: 14px;
-    }
-    /* Tema: Corporate Tech (default) */
-    [data-theme="tech"] {
-      --bg: #f7f9fb;
-      --card: #ffffff;
-      --text: #0f172a;
-      --muted: #5b6576;
-      --border: #e6eaf0;
-      --brand: #0d6efd;
-      --brand-2: #5aa0ff;
-    }
-    /* Tema: Finance (navy + gold) */
-    [data-theme="finance"] {
-      --bg: #f8fafc;
-      --card: #ffffff;
-      --text: #0e1320;
-      --muted: #5c6473;
-      --border: #e7ebf1;
-      --brand: #142257;   /* navy */
-      --brand-2: #d4a017; /* gold */
+      --radius: 16px;
+      --radius-sm: 12px;
+      --playfair: ui-serif, Georgia, Cambria, "Times New Roman", Times, serif;
+      --sans: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, sans-serif;
     }
     * { box-sizing: border-box }
     html, body { height: 100% }
-    body {
-      margin: 0;
-      font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, sans-serif;
-      color: var(--text);
-      background:
-        radial-gradient(1200px 600px at 10% -10%, #ffffff 0%, rgba(255,255,255,0) 60%),
-        radial-gradient(1200px 600px at 110% -30%, #edf3ff 0%, rgba(237,243,255,0) 60%),
-        var(--bg);
-      display: grid;
-      place-items: center;
-      padding: 32px 20px;
-    }
-    .wrap { width: 100%; max-width: 960px }
-    .shell {
-      background: var(--card);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      box-shadow: var(--shadow);
-      overflow: hidden;
-    }
-    .header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 18px 22px;
-      border-bottom: 1px solid var(--border);
-    }
-    .brand {
-      display: inline-flex;
-      align-items: center;
-      gap: 10px;
-      font-weight: 600;
-      letter-spacing: .2px;
-    }
-    .badge {
-      width: 24px; height: 24px; border-radius: 6px;
-      background: linear-gradient(135deg, var(--brand), var(--brand-2));
-      box-shadow: 0 4px 14px rgba(13, 110, 253, .35);
-    }
-    .main { padding: 38px 28px }
-    .hero {
-      display: grid;
-      grid-template-columns: 1fr;
-      gap: 18px;
-      align-items: start;
-    }
-    .title { font-size: clamp(24px, 3.2vw, 32px); margin: 0 }
-    .lead  { margin: 0; color: var(--muted); line-height: 1.6 }
-    .actions { margin-top: 14px; display: flex; gap: 10px; flex-wrap: wrap }
-    .btn {
-      appearance: none; border: 0; cursor: pointer;
-      display: inline-flex; align-items: center; gap: 8px;
-      height: 38px; padding: 0 14px; border-radius: 10px;
-      font-weight: 600; letter-spacing: .2px; text-decoration: none;
-    }
-    .btn-primary { color: #fff; background: var(--brand); box-shadow: 0 6px 18px rgba(13,110,253,.25) }
-    .btn-ghost   { color: var(--text); background: #f2f5f8; border: 1px solid var(--border) }
-    .footer {
-      display: flex; align-items: center; justify-content: space-between;
-      padding: 16px 22px; border-top: 1px solid var(--border); color: var(--muted);
-      font-size: 13px;
-    }
-    @media (min-width: 880px) {
-      .hero { grid-template-columns: 1.15fr .85fr; align-items: center }
-      .illustration { justify-self: end }
-    }
-    .illu-card { width: 100%; max-width: 380px; aspect-ratio: 4/3; border-radius: 12px; overflow: hidden; border: 1px solid var(--border); box-shadow: var(--shadow); background: #f4f7fb }
-    .illu-card img { width: 100%; height: 100%; object-fit: cover; display: block }
+    body { margin: 0; font-family: var(--sans); color: var(--text); background: var(--bg) }
+    .promo { background: var(--pink-700); color: #fff; font-size: 14px }
+    .promo .inner, .container { max-width: 1120px; margin: 0 auto; padding: 8px 16px }
+    header.site { position: sticky; top: 0; z-index: 40; background: rgba(255,255,255,.92); backdrop-filter: blur(8px); border-bottom: 1px solid var(--border) }
+    header .row { height: 64px; display: flex; align-items: center; justify-content: space-between }
+    .brand { display: flex; align-items: center; gap: 10px; text-decoration: none; color: inherit }
+    .brand .logo { width: 36px; height: 36px; border-radius: 999px; background: linear-gradient(135deg, #f9a8d4, #ec4899); box-shadow: 0 8px 24px rgba(236,72,153,.35) }
+    .brand .title { font-family: var(--playfair); font-size: 20px; line-height: 1 }
+    .brand .subtitle { margin-top: 2px; font-size: 12px; color: #64748b }
+    nav.links { display: none; gap: 18px; font-size: 14px }
+    @media (min-width: 768px) { nav.links { display: flex } }
+    nav.links a { color: inherit; text-decoration: none }
+    nav.links a:hover { color: var(--pink-700) }
+    .actions { display: flex; align-items: center; gap: 8px }
+    .search { display: none; align-items: center; gap: 8px; background: #f1f5f9; border-radius: 999px; padding: 6px 10px }
+    .search input { width: 220px; border: 0; outline: 0; background: transparent; font-size: 14px }
+    @media (min-width: 768px) { .search { display: flex } }
+    .iconbtn { position: relative; border-radius: 999px; padding: 8px; border: 0; background: transparent; cursor: pointer }
+    .iconbtn:hover { background: #f1f5f9 }
+
+    /* Hero */
+    .hero { margin: 24px 0 0 }
+    .hero-grid { display: grid; grid-template-columns: 1fr; gap: 16px }
+    @media (min-width: 768px) { .hero-grid { grid-template-columns: 2fr 1fr } }
+    .card { position: relative; overflow: hidden; border-radius: 18px; box-shadow: var(--shadow); border: 1px solid var(--border); background: #f8fafc }
+    .card img { width: 100%; height: 100%; object-fit: cover; display: block }
+    .card .grad { position: absolute; inset: 0; background: linear-gradient(to top, rgba(0,0,0,.45), rgba(0,0,0,0)) }
+    .card .content { position: absolute; left: 20px; right: 20px; bottom: 20px; color: white }
+    .display { font-family: var(--playfair); font-size: clamp(22px, 3.2vw, 34px) }
+    .muted-inv { color: rgba(255,255,255,.9) }
+    .btn { appearance: none; border: 0; cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; gap: 8px; padding: 10px 14px; border-radius: 999px; font-weight: 600; font-size: 14px }
+    .btn-primary { background: var(--pink-700); color: #fff }
+    .btn-primary:hover { background: var(--pink-800) }
+    .btn-ghost { border: 1px solid rgba(255,255,255,.7); background: rgba(255,255,255,.12); color: #fff; backdrop-filter: blur(8px) }
+    .btn-ghost:hover { background: rgba(255,255,255,.22) }
+
+    /* Sections */
+    section { margin-top: 32px }
+    h2.sec { font-family: var(--playfair); font-size: 24px; margin: 0 0 12px }
+    .grid { display: grid; gap: 14px }
+    .grid.cat { grid-template-columns: repeat(2,minmax(0,1fr)) }
+    @media (min-width: 640px) { .grid.cat { grid-template-columns: repeat(3,minmax(0,1fr)) } }
+    @media (min-width: 960px) { .grid.cat { grid-template-columns: repeat(6,minmax(0,1fr)) } }
+    .cat { text-decoration: none; color: inherit; text-align: center; border: 1px solid var(--border); border-radius: 14px; padding: 12px }
+    .cat:hover { box-shadow: var(--shadow) }
+    .cat .avatar { width: 80px; height: 80px; border-radius: 999px; overflow: hidden; margin: 0 auto 8px; border: 1px solid var(--border) }
+    .cat .avatar img { width: 100%; height: 100%; object-fit: cover }
+
+    .grid.products { grid-template-columns: repeat(2,minmax(0,1fr)) }
+    @media (min-width: 960px) { .grid.products { grid-template-columns: repeat(4,minmax(0,1fr)) } }
+    .product { text-decoration: none; color: inherit; border: 1px solid var(--border); border-radius: 16px; overflow: hidden }
+    .product:hover { box-shadow: var(--shadow) }
+    .product .ph { aspect-ratio: 4/5; background: #f1f5f9; position: relative; overflow: hidden }
+    .product .ph img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover }
+    .product .meta { padding: 10px 12px }
+    .product .name { font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
+    .product .price { margin-top: 4px; font-weight: 700 }
+
+    .newsletter { display: flex; flex-direction: column; gap: 12px; align-items: center; justify-content: space-between; border: 1px solid var(--border); border-radius: 16px; padding: 16px }
+    @media (min-width: 768px) { .newsletter { flex-direction: row; padding: 24px } }
+    .newsletter .title { font-family: var(--playfair); font-size: 22px }
+    .newsletter .desc { color: var(--muted) }
+    .newsletter form { display: flex; gap: 8px; width: 100%; max-width: 420px }
+    .newsletter input { flex: 1; border-radius: 999px; border: 1px solid #cbd5e1; padding: 10px 14px; outline: none }
+    .newsletter input:focus { box-shadow: 0 0 0 4px rgba(236,72,153,.15) }
+
+    footer.site { border-top: 1px solid var(--border); background: #f8fafc; margin-top: 36px }
+    footer .cols { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 16px; font-size: 14px; padding: 24px 16px; max-width: 1120px; margin: 0 auto }
+    @media (min-width: 960px) { footer .cols { grid-template-columns: repeat(4,minmax(0,1fr)) } }
+    footer h3 { margin: 0 0 10px; font-weight: 600 }
+    footer a { color: inherit; text-decoration: none }
+    footer a:hover { color: var(--pink-700) }
+    .copyright { text-align: center; color: #94a3b8; font-size: 12px; padding-bottom: 24px }
   </style>
-  <meta name="description" content="Halaman aman bergaya corporate: simple, clean, modern, ramah untuk pengunjung dan cocok untuk kampanye iklan." />
-  <meta name="format-detection" content="telephone=no" />
+  <link rel="preload" as="image" href="https://www.flowerchimp.co.id/cdn/shop/files/12RedRosesKoreanStyle1_800x.jpg?v=1717658399" />
+  <link rel="preload" as="image" href="https://www.flowerchimp.co.id/cdn/shop/files/flowerchimp-bouquet-crimson-ardour-2500x2500-02_800x.jpg?v=1738661069" />
+  <link rel="preload" as="image" href="https://www.flowerchimp.co.id/cdn/shop/products/0620-PinkBlush-Thumbnail-01_800x.jpg?v=1594200523" />
+  <link rel="preload" as="image" href="https://www.flowerchimp.co.id/cdn/shop/products/so_sunny_530_800x.jpg?v=1547189018" />
 </head>
 <body>
-  <div class="wrap">
-    <div class="shell" role="region" aria-label="Konten">
-      <header class="header" role="banner">
-        <div class="brand" aria-label="Brand">
-          <span class="badge" aria-hidden="true"></span>
-          <span>Official</span>
+  <div class="promo"><div class="inner">Pengiriman cepat dan aman ke banyak kota di Indonesia</div></div>
+  <header class="site">
+    <div class="container">
+      <div class="row">
+        <a href="#" class="brand" aria-label="FlowerStore">
+          <span class="logo" aria-hidden="true"></span>
+          <span>
+            <div class="title">FlowerStore</div>
+            <div class="subtitle">Buket • Hampers • Hadiah</div>
+          </span>
+        </a>
+        <nav class="links" aria-label="Navigasi utama">
+          <a href="#kategori">Kategori</a>
+          <a href="#terlaris">Terlaris</a>
+          <a href="#promo">Promo</a>
+          <a href="#ulasan">Ulasan</a>
+        </nav>
+        <div class="actions">
+          <div class="search" role="search">
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M12.9 14.32a8 8 0 111.414-1.414l4.387 4.387a1 1 0 01-1.414 1.414l-4.387-4.387zM14 8a6 6 0 11-12 0 6 6 0 0112 0z" clip-rule="evenodd"/></svg>
+            <input placeholder="Cari bunga, buket, hampers..." aria-label="Cari" />
+          </div>
+          <button class="iconbtn" aria-label="Keranjang">
+            <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M2.25 3a.75.75 0 000 1.5h1.386c.17 0 .318.114.36.279l2.36 9.44A2.25 2.25 0 008.542 16.5h7.916a2.25 2.25 0 002.186-1.686l1.8-7.2A.75.75 0 0019.75 6H6.343l-.53-2.118A2.25 2.25 0 003.636 3H2.25z"/><path d="M8.25 21a.75.75 0 100-1.5.75.75 0 000 1.5zM18.75 21a.75.75 0 100-1.5.75.75 0 000 1.5z"/></svg>
+          </button>
         </div>
-      </header>
-      <main class="main" id="main" role="main">
-        <section class="hero" aria-labelledby="t">
-          <div>
-            <h1 id="t" class="title">Selamat datang</h1>
-            <p class="lead">Tampilan profesional yang sederhana dan nyaman dibaca. Pengalaman Anda kami jaga secara otomatis.</p>
-            <div class="actions">
-              <a class="btn btn-primary" href="/" rel="nofollow">Beranda</a>
-              <a class="btn btn-ghost" href="#main">Pelajari lebih lanjut</a>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <section class="container hero">
+      <div class="hero-grid">
+        <article class="card" style="height: 320px">
+          <img src="https://www.flowerchimp.co.id/cdn/shop/files/12RedRosesKoreanStyle1_800x.jpg?v=1717658399" alt="Buket mawar merah 12 Korean Style" loading="eager" fetchpriority="high" decoding="async" />
+          <div class="grad" aria-hidden="true"></div>
+          <div class="content">
+            <h1 class="display">Bunga Segar untuk Momen Spesial</h1>
+            <p class="muted-inv">Koleksi buket dan hampers dengan rangkaian indah, siap kirim dengan layanan ramah.</p>
+            <div style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap">
+              <a href="#terlaris" class="btn btn-primary">Belanja Sekarang</a>
+              <a href="#kategori" class="btn btn-ghost">Lihat Kategori</a>
             </div>
           </div>
-          <div class="illustration">
-            <figure class="illu-card">
-              <img src="/hero-1200.jpg" alt="Suasana kerja tim profesional di ruang meeting" width="1200" height="787" loading="eager" fetchpriority="high" decoding="async" />
-            </figure>
+        </article>
+        <article class="card" style="height: 320px">
+          <img src="https://www.flowerchimp.co.id/cdn/shop/files/flowerchimp-bouquet-crimson-ardour-2500x2500-02_800x.jpg?v=1738661069" alt="Promo Crimson Ardour" />
+          <div class="grad" aria-hidden="true"></div>
+          <div class="content">
+            <div style="display:inline-block;background:rgba(255,255,255,.9);color:#000;border-radius:6px;padding:4px 8px;font-size:13px">Promo</div>
+            <div class="display" style="margin-top:6px">Diskon Spesial</div>
+            <div class="muted-inv">Hemat untuk koleksi pilihan hari ini</div>
           </div>
-        </section>
-      </main>
-      <footer class="footer" role="contentinfo">
-        <span>© <span id="y"></span></span>
-        <span>Akses aman • Privasi dijaga</span>
-        <span style="opacity:.9">Foto: Unsplash</span>
-      </footer>
+        </article>
+      </div>
+    </section>
+
+    <section id="kategori" class="container">
+      <h2 class="sec">Belanja Berdasarkan Kategori</h2>
+      <div class="grid cat">
+        <a class="cat" href="#"><div class="avatar"><img src="https://images.pexels.com/photos/56866/garden-roses-red-roses-56866.jpeg?auto=compress&cs=tinysrgb&w=200" alt="Buket Mawar"/></div><div class="label">Buket Mawar</div></a>
+        <a class="cat" href="#"><div class="avatar"><img src="https://images.pexels.com/photos/931177/pexels-photo-931177.jpeg?auto=compress&cs=tinysrgb&w=200" alt="Ulang Tahun"/></div><div class="label">Ulang Tahun</div></a>
+        <a class="cat" href="#"><div class="avatar"><img src="https://images.pexels.com/photos/931162/pexels-photo-931162.jpeg?auto=compress&cs=tinysrgb&w=200" alt="Hampers"/></div><div class="label">Hampers</div></a>
+        <a class="cat" href="#"><div class="avatar"><img src="https://images.pexels.com/photos/36764/marguerite-daisy-beautiful-beauty.jpg?auto=compress&cs=tinysrgb&w=200" alt="Papan Bunga"/></div><div class="label">Papan Bunga</div></a>
+        <a class="cat" href="#"><div class="avatar"><img src="https://images.pexels.com/photos/1028593/pexels-photo-1028593.jpeg?auto=compress&cs=tinysrgb&w=200" alt="Bunga Meja"/></div><div class="label">Bunga Meja</div></a>
+        <a class="cat" href="#"><div class="avatar"><img src="https://images.pexels.com/photos/708777/pexels-photo-708777.jpeg?auto=compress&cs=tinysrgb&w=200" alt="Semua Kategori"/></div><div class="label">Semua Kategori</div></a>
+      </div>
+    </section>
+
+    <section id="terlaris" class="container">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+        <h2 class="sec" style="margin:0">Produk Terlaris</h2>
+        <a href="#" style="font-size:14px;color:var(--pink-700);text-decoration:none">Lihat Semua</a>
+      </div>
+      <div class="grid products" style="margin-top:14px">
+        <a class="product" href="#"><div class="ph"><img src="https://www.flowerchimp.co.id/cdn/shop/products/0820-JustForYou-Thumbnail-01_800x.jpg?v=1598248788" alt="Buket Mawar Premium"/></div><div class="meta"><div class="name">Buket Mawar Premium</div><div class="price">Rp 459.000</div></div></a>
+        <a class="product" href="#"><div class="ph"><img src="https://www.flowerchimp.co.id/cdn/shop/products/teddy-love-22982808567993_800x.jpg?v=1614315406" alt="Buket + Teddy"/></div><div class="meta"><div class="name">Buket + Teddy</div><div class="price">Rp 699.000</div></div></a>
+        <a class="product" href="#"><div class="ph"><img src="https://www.flowerchimp.co.id/cdn/shop/files/flowerchimp-bouquet-crimson-ardour-2500x2500-02_800x.jpg?v=1738661069" alt="Buket Bunga Meja Elegan"/></div><div class="meta"><div class="name">Buket Bunga Meja Elegan</div><div class="price">Rp 389.000</div></div></a>
+        <a class="product" href="#"><div class="ph"><img src="https://www.flowerchimp.co.id/cdn/shop/products/0620-PinkBlush-Thumbnail-01_800x.jpg?v=1594200523" alt="Pink Blush"/></div><div class="meta"><div class="name">Pink Blush</div><div class="price">Rp 499.000</div></div></a>
+      </div>
+    </section>
+
+    <section id="promo" class="container">
+      <div class="grid" style="grid-template-columns: 1fr; gap: 16px">
+        <article class="card" style="height: 180px">
+          <img src="https://www.flowerchimp.co.id/cdn/shop/products/so_sunny_530_800x.jpg?v=1547189018" alt="Rangkaian So Sunny" />
+          <div class="grad" aria-hidden="true"></div>
+          <div class="content">
+            <div class="display" style="font-size:22px">Hampers Premium</div>
+            <div class="muted-inv">Paket hadiah untuk orang tersayang</div>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <section id="ulasan" class="container">
+      <h2 class="sec">Apa Kata Pelanggan</h2>
+      <div class="grid" style="grid-template-columns: 1fr; gap: 14px">
+        <article class="card" style="border-radius: 16px; overflow: hidden; padding: 16px; background: var(--card); border: 1px solid var(--border); box-shadow: var(--shadow)">
+          <div style="display:flex;align-items:center;gap:10px">
+            <img src="https://images.unsplash.com/photo-1502685104226-ee32379fefbe?auto=format&fit=crop&w=80&q=60" alt="Ayu" width="40" height="40" style="border-radius:999px;object-fit:cover" />
+            <div style="font-size:14px"><div style="font-weight:600">Ayu</div><div style="color:#64748b">Jakarta</div></div>
+          </div>
+          <p style="margin:10px 0 0;color:#334155">Bunganya segar dan rangkaiannya cantik. Pengiriman tepat waktu.</p>
+        </article>
+        <article class="card" style="border-radius: 16px; overflow: hidden; padding: 16px; background: var(--card); border: 1px solid var(--border); box-shadow: var(--shadow)">
+          <div style="display:flex;align-items:center;gap:10px">
+            <img src="https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=80&q=60" alt="Rudi" width="40" height="40" style="border-radius:999px;object-fit:cover" />
+            <div style="font-size:14px"><div style="font-weight:600">Rudi</div><div style="color:#64748b">Bandung</div></div>
+          </div>
+          <p style="margin:10px 0 0;color:#334155">Respon cepat dan pelayanan ramah. Sangat direkomendasikan.</p>
+        </article>
+        <article class="card" style="border-radius: 16px; overflow: hidden; padding: 16px; background: var(--card); border: 1px solid var(--border); box-shadow: var(--shadow)">
+          <div style="display:flex;align-items:center;gap:10px">
+            <img src="https://images.unsplash.com/photo-1547425260-76bcadfb4f2?auto=format&fit=crop&w=80&q=60" alt="Sari" width="40" height="40" style="border-radius:999px;object-fit:cover" />
+            <div style="font-size:14px"><div style="font-weight:600">Sari</div><div style="color:#64748b">Surabaya</div></div>
+          </div>
+          <p style="margin:10px 0 0;color:#334155">Desain modern, pilihan banyak, harga bersahabat.</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="container">
+      <div class="newsletter">
+        <div>
+          <div class="title">Dapatkan Info Promo & Koleksi Baru</div>
+          <div class="desc">Berlangganan untuk kabar terbaru dari kami</div>
+        </div>
+        <form>
+          <input type="email" required placeholder="Email Anda" aria-label="Email" />
+          <button class="btn btn-primary" type="submit">Langganan</button>
+        </form>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site">
+    <div class="cols">
+      <div>
+        <div class="brand" style="gap:8px; text-decoration:none; margin-bottom:6px"><span class="logo" aria-hidden="true"></span><span class="title">FlowerStore</span></div>
+        <p style="margin:0;color:#475569">Rangkaian bunga dan hadiah untuk berbagai momen.</p>
+      </div>
+      <div>
+        <h3>Bantuan</h3>
+        <div style="display:grid;gap:8px;color:#475569">
+          <a href="#">Cara Pemesanan</a>
+          <a href="#">Pengiriman</a>
+          <a href="#">Kebijakan & Privasi</a>
+        </div>
+      </div>
+      <div>
+        <h3>Kategori</h3>
+        <div style="display:grid;gap:8px;color:#475569">
+          <a href="#">Buket</a>
+          <a href="#">Hampers</a>
+          <a href="#">Bunga Meja</a>
+        </div>
+      </div>
+      <div>
+        <h3>Ikuti Kami</h3>
+        <div style="display:flex;gap:10px;color:#475569">
+          <a href="#" aria-label="instagram">IG</a>
+          <a href="#" aria-label="tiktok">TT</a>
+          <a href="#" aria-label="facebook">FB</a>
+        </div>
+      </div>
     </div>
-  </div>
+    <div class="copyright">© <span id="y"></span> FlowerStore. Semua hak dilindungi.</div>
+  </footer>
 
   <script>
-    // Tahun dinamis tanpa dependensi eksternal
     document.getElementById('y').textContent = new Date().getFullYear();
   </script>
 
